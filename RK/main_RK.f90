@@ -1,5 +1,6 @@
 program main_RK
 !! Purpose: To find the dynamic response of a metabeam of bistable elements
+!!         using an explicit Runge-Kutta method.
 !!
 !! To compile (gnu): mpif90 -o main.exe -fdefault-real-8 main.f90
 !! To compile (intel): mpif90 -o main.exe -r8 main.f90
@@ -87,7 +88,6 @@ real, allocatable, dimension(:) :: m_loc, b_loc ! local mass/damping arrays
 real, allocatable, dimension(:) :: p_loc ! external force calculated at each time step
 
 !! Data dictionary: temporary computational variables
-!integer(kind=IntKind_R12) :: itR12
 integer :: it, it2, it3
 integer :: cnt1
 real(kind=DBL) :: t ! current simulation time 
