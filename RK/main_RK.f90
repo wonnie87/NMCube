@@ -14,7 +14,7 @@ program main_RK
 !! 10/29/2020   Myungwon Hwang   Rev00: Initial working program
 !!
 
-use phdf5_helpers
+use hdf5_helpers
 use mpi
 use sub_RK
         
@@ -1201,7 +1201,7 @@ call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
 tWallclockEnd = MPI_WTIME()
 
 if (procID == 0) then
-    write (*,*) tWallclockEnd-tWallclockStart
+    write (*,'(A,F12.6,A)') "Wallclock time: ", tWallclockEnd-tWallclockStart, " s."
 
     call h5dclose_f(dset_t_id, hdf5_ierr)
     call h5dclose_f(dset_x_id, hdf5_ierr)

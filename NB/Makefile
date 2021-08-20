@@ -1,5 +1,6 @@
 EXE = main_NB.exe
-OBJ = phdf5_helpers.o sub_NB.o main_NB.o
+#OBJ = phdf5_helpers.o sub_NB.o main_NB.o
+OBJ = hdf5_helpers.o sub_NB.o main_NB.o
 MPIF = mpif90
 MPIF_FLAG = -fdefault-real-8
 #MPIF_FLAG = -r8 ## uncomment if using Intel complier
@@ -15,10 +16,10 @@ INP = InputFileGeneration_NB.py
 $(EXE): $(OBJ)
 	$(MPIF) -o $(EXE) $(OBJ) $(I_FLAG) $(L_FLAG)
 
-phdf5_helpers.mod: phdf5_helpers.o
-
-phdf5_helpers.o: hdf5_helpers.mod phdf5_helpers.f90 
-	$(MPIF) $(MPIF_FLAG) -c phdf5_helpers.f90 $(I_FLAG)
+#phdf5_helpers.mod: phdf5_helpers.o
+#
+#phdf5_helpers.o: hdf5_helpers.mod phdf5_helpers.f90 
+#	$(MPIF) $(MPIF_FLAG) -c phdf5_helpers.f90 $(I_FLAG)
 
 hdf5_helpers.mod: hdf5_helpers.o
 
@@ -30,7 +31,8 @@ sub_NB.mod: sub_NB.o
 sub_NB.o: sub_NB.f90
 	$(MPIF) $(MPIF_FLAG) -c sub_NB.f90 $(I_FLAG)
 
-main_NB.o: phdf5_helpers.mod sub_NB.mod main_NB.f90
+#main_NB.o: phdf5_helpers.mod sub_NB.mod main_NB.f90
+main_NB.o: hdf5_helpers.mod sub_NB.mod main_NB.f90
 	$(MPIF) $(MPIF_FLAG) -c main_NB.f90 $(I_FLAG)
 
 .PHONY: run clean reset

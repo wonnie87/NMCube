@@ -1,5 +1,6 @@
 EXE = main_RK.exe
-OBJ = phdf5_helpers.o sub_RK.o main_RK.o
+#OBJ = phdf5_helpers.o sub_RK.o main_RK.o
+OBJ = hdf5_helpers.o sub_RK.o main_RK.o
 MPIF = mpif90
 MPIF_FLAG = -fdefault-real-8
 #MPIF_FLAG = -r8 # uncomment if using Intel complier
@@ -15,10 +16,10 @@ INP = InputFileGeneration.py
 $(EXE): $(OBJ)
 	$(MPIF) -o $(EXE) $(OBJ) $(I_FLAG) $(L_FLAG)
 
-phdf5_helpers.mod: phdf5_helpers.o
-
-phdf5_helpers.o: hdf5_helpers.mod phdf5_helpers.f90 
-	$(MPIF) $(MPIF_FLAG) -c phdf5_helpers.f90 $(I_FLAG)
+#phdf5_helpers.mod: phdf5_helpers.o
+#
+#phdf5_helpers.o: hdf5_helpers.mod phdf5_helpers.f90 
+#	$(MPIF) $(MPIF_FLAG) -c phdf5_helpers.f90 $(I_FLAG)
 
 hdf5_helpers.mod: hdf5_helpers.o
 
@@ -30,7 +31,8 @@ sub_RK.mod: sub_RK.o
 sub_RK.o: sub_RK.f90
 	$(MPIF) $(MPIF_FLAG) -c sub_RK.f90 $(I_FLAG)
 
-main_RK.o: phdf5_helpers.mod sub_RK.mod main_RK.f90
+#main_RK.o: phdf5_helpers.mod sub_RK.mod main_RK.f90
+main_RK.o: hdf5_helpers.mod sub_RK.mod main_RK.f90
 	$(MPIF) $(MPIF_FLAG) -c main_RK.f90 $(I_FLAG)
 
 .PHONY: run clean reset

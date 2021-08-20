@@ -15,7 +15,8 @@ program main_NB
 !! 08/10/2021   Myungwon Hwang   Rev01: Syntax update to match that of RK solver
 !!
 
-use phdf5_helpers
+!use phdf5_helpers
+use hdf5_helpers
 use mpi
 use sub_NB
         
@@ -607,10 +608,10 @@ end do
 call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
 tWallclockEnd = MPI_WTIME()
 if (procID == 0) then
-    write (*,*) tWallclockEnd - tWallclockStart
-    do it = DoF+1, DoF*(10+1)
-        write (*,*) u_loc(it)
-    end do
+    write (*,'(A,F12.6,A)') "Wallclock time: ", tWallclockEnd-tWallclockStart, " s."
+!    do it = DoF+1, DoF*(10+1)
+!        write (*,*) u_loc(it)
+!    end do
     write (12,121)
     write (12,123) tWallclockEnd - tWallclockStart
     write (12,124) t_inv_total
