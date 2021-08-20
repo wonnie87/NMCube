@@ -2,9 +2,16 @@ program main_RK
 !! Purpose: To find the dynamic response of a metabeam of bistable elements
 !!         using an explicit Runge-Kutta method.
 !!
-!! To compile (gnu): mpif90 -o main.exe -fdefault-real-8 main.f90
-!! To compile (intel): mpif90 -o main.exe -r8 main.f90
-!! To run : mpirun -np 4 main.exe
+!! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
+!!
+!! Using Makefile:
+!!   To compile: make
+!!   To run: make run NP=(No of Procs) INP=(InputFile)
+!!
+!! Record of revisions:
+!!    DATE        Programmer                      Decsription
+!! ==========  ================  =================================================
+!! 10/29/2020   Myungwon Hwang   Rev00: Initial working program
 !!
 
 use phdf5_helpers
@@ -22,9 +29,10 @@ integer, allocatable, dimension(:) :: scatter_sc, scatter_sc2, scatter_sc3 ! num
 integer, allocatable, dimension(:) :: scatter_disp, scatter_disp2, scatter_disp3 ! the starting counter for MPI_SCATTERV
 real :: tWallclockStart, tWallclockEnd ! wall clock time of the star and the end of the execution
 !! Data dictionary: HDF5-related
+character(80) :: filename
 integer(HID_T) :: file_id, dspace_m_id, dspace_t_id, dspace_x_id, dspace_f_id, mspace_t_id, mspace_x_id, mspace_f_id
 integer(HID_T) :: aspace_N_id, aspace_G_id, aspace_L_id, aspace_k_id, aspace_f_UC_id, attr_id
-integer(HID_T) :: dset_m_id, dset_t_id, dset_x_id, dset_xdot_id, dset_f_id, dset_xddot_id !, dset_xdotAlt_id
+integer(HID_T) :: dset_m_id, dset_t_id, dset_x_id, dset_xdot_id, dset_f_id, dset_xddot_id 
 integer(HSIZE_T), dimension(1:1) :: dimsa_N, dimsa_G, dimsa_L, dimsa_k, dimsa_f_UC
 integer(HSIZE_T), dimension(1:1) :: dims_m, dims_t, dimsm_t
 integer(HSIZE_T), dimension(1:1) :: hslab_t_offset, hslab_t_count, hslab_t_stride, hslab_t_block
@@ -42,11 +50,8 @@ integer, parameter :: DBL=SELECTED_REAL_KIND(p=10,r=100)
 real(kind=DBL) :: dt ! numerical time steps
 real(kind=DBL) :: dtWrite ! output write frequency
 real :: tStart, tEnd ! simulation start and end times
-!integer, parameter :: IntKind_R12 = selected_int_kind(12)
-!integer(kind=IntKind_R12) :: Nt ! no. of time steps
-!integer :: dNt_output ! store output data at every 'dNt_output' step
 real :: c2, c3, c4, a21, a31, a32, a41, a42, a43, b1, b2, b3, b4 ! RK coefficents
-integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 3: spring-joined, 4: metabeam
+integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 4: metabeam
 integer, dimension(0:2) :: BC ! boundary condition
 real, dimension(9) :: k = 0.0 ! spring stiffness array
 real, dimension(4) :: L ! length array containing unit cell geometry information
@@ -63,17 +68,8 @@ integer :: LC_loc_dim2
 integer, allocatable, dimension(:,:) :: LC_loc
 real, allocatable, dimension(:,:) :: LC_val_loc
 integer :: LC_flag ! load case (1: single-point horizontal, 2: distributed vertical)
-integer :: startnode, endnode ! global starting/end node of the distributed vertical loads
-real :: forceIn ! magnitude of input force
-real :: freqIn ! input frequency
-real :: Amp, Amp2 ! disp amplitude, noise amplitude
-real :: tForceStart, tForceEnd ! start and end time for applied force
-real :: vFlow ! flow speed
-real :: t_UC ! time for the flow to travel one unit length (or, time phase)
 integer :: DoF ! unit cell degrees of freedom
 integer :: noState ! number of states per unit cell
-real :: zeta ! damping coefficient
-real :: freq0 ! fundamental frequency for proportional damping
 real, allocatable, dimension(:) :: m_global ! global mass array
 real, allocatable, dimension(:) :: b_global ! global damping array
 real, allocatable, dimension(:) :: x ! global array of state space (including initial condition)
@@ -82,7 +78,6 @@ real, allocatable, dimension(:) :: k1_global ! global reaction force array
 !! Data dictionary: local variables
 integer :: N_fl, N_ceil ! min and max number of N_loc across the processes
 integer :: N_loc ! number of unit cells per process
-integer :: startnode_loc, endnode_loc ! corresponding local node numbers
 real, allocatable, dimension(:) :: x_loc ! state space for each local process
 real, allocatable, dimension(:) :: m_loc, b_loc ! local mass/damping arrays
 real, allocatable, dimension(:) :: p_loc ! external force calculated at each time step
@@ -93,8 +88,6 @@ integer :: cnt1
 real(kind=DBL) :: t ! current simulation time 
 real, allocatable, dimension(:) :: k1, k2, k3, k4 ! RK method
 real, allocatable, dimension(:) :: xTmp ! ...
-real, allocatable, dimension(:) :: f
-real :: phi0 ! phase constant for disp input
 real, allocatable, dimension(:) :: f_val, f_val_loc ! store force value at each iteration
 real :: ran ! random number
 
@@ -105,14 +98,13 @@ call MPI_COMM_RANK(MPI_COMM_WORLD, procID, mpi_ierr)
 
 if (procID == 0) then
     call h5open_f(hdf5_ierr)
-    call h5fcreate_f('main_RK.h5', H5F_ACC_TRUNC_F, file_id, hdf5_ierr)
-
     open(unit=1, file='numMethod.inp', status='old', action='read', iostat=f_ierr, iomsg=f_msg)
+
     if (f_ierr == 0) then
-        ! numMethod.inp was opened successfuly.
+        write (*,'(A)') "numMethod.inp is opened successfully."
         open(unit=2, file='design.inp', status='old', action='read', iostat=f_ierr, iomsg=f_msg)
         if (f_ierr == 0) then
-            ! design.inp was opened successfully.
+            write (*,'(A)') "design.inp is opened successfully."
             read (1,'(/,I3)') sol_flag
             if (sol_flag == 10) then
                 read (1,*); read (1,*) b1
@@ -134,9 +126,11 @@ if (procID == 0) then
             read (1,*); read (1,*) tEnd
             read (1,*); read (1,*) dtWrite
 
+            read (2,'(/A)') filename
+            call h5fcreate_f(trim(adjustl(filename)), H5F_ACC_TRUNC_F, file_id, hdf5_ierr)
             read (2,'(/I10)') N_global
             if (N_global < noProc) then
-                write (*,'(A)') "The number of unit cells less than the number of processes. &
+                write (*,'(A)') "The number of unit cells is less than the number of processes. &
                 & Use NP value less than the number of unit cells."
                 call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
             end if
@@ -357,8 +351,6 @@ else if (prob_flag == 4) then
     call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
     call MPI_BCAST(noState, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 end if
-
-allocate(f(noState), STAT=f_stat)
 
 N_fl = N_global/noProc
 N_ceil = N_fl + MOD(N_global, noProc)
@@ -614,6 +606,13 @@ do
                 p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = f_val_loc(it)
             end if
         else if (LC_loc(3,it) == 3) then
+        else if (LC_loc(3,it) == 11) then
+            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
+                & SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
+                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
+            end if
         else if (LC_loc(3,it) == 12) then
             if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
                 x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
@@ -625,6 +624,13 @@ do
                 & SIN(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
                 & COS(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
                 & SIN(2*PI*LC_val_loc(4,it)*t+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
+            end if
+        else if (LC_loc(3,it) == 13) then
+            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
+                & COS(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
+                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
             end if
         end if
     end do
@@ -644,7 +650,7 @@ do
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
                         if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 12 ) then
+                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                 k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                 k1(noState*it2+2*LC_loc(2,it3)) = 0.
                             end if
@@ -667,7 +673,7 @@ do
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
                         if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 12 ) then
+                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                 k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                 k1(noState*it2+2*LC_loc(2,it3)) = 0.
                             end if
@@ -690,7 +696,7 @@ do
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
                         if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 12 ) then
+                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                 k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                 k1(noState*it2+2*LC_loc(2,it3)) = 0.
                             end if
@@ -754,6 +760,13 @@ do
                     & SIN(PI*((t+c2*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
                 end if
             else if (LC_loc(3,it) == 3) then
+            else if (LC_loc(3,it) == 11) then
+                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                    x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
+                    & SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
+                    x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                    & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
+                end if
             else if (LC_loc(3,it) == 12) then
                 if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
                     xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
@@ -765,6 +778,13 @@ do
                     & SIN(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
                     & COS(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
                     & SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
+                end if
+            else if (LC_loc(3,it) == 13) then
+                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                    x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
+                    & COS(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
+                    x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                    & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
                 end if
             end if
         end do
@@ -785,7 +805,7 @@ do
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
                             if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 12 ) then
+                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                     k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                     k2(noState*it2+2*LC_loc(2,it3)) = 0.
                                 end if
@@ -808,7 +828,7 @@ do
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
                             if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 12 ) then
+                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                     k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                     k2(noState*it2+2*LC_loc(2,it3)) = 0.
                                 end if
@@ -831,7 +851,7 @@ do
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
                             if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 12 ) then
+                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                     k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                     k2(noState*it2+2*LC_loc(2,it3)) = 0.
                                 end if
@@ -882,6 +902,13 @@ do
                         & SIN(PI*((t+c3*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
                     end if
                 else if (LC_loc(3,it) == 3) then
+                else if (LC_loc(3,it) == 11) then
+                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                        x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
+                        & SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
+                        x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                        & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
+                    end if
                 else if (LC_loc(3,it) == 12) then
                     if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
                         xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
@@ -893,6 +920,13 @@ do
                         & SIN(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
                         & COS(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
                         & SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
+                    end if
+                else if (LC_loc(3,it) == 13) then
+                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                        x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
+                        & COS(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
+                        x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                        & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
                     end if
                 end if
             end do
@@ -913,7 +947,7 @@ do
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
                                 if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 12 ) then
+                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                         k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                         k3(noState*it2+2*LC_loc(2,it3)) = 0.
                                     end if
@@ -936,7 +970,7 @@ do
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
                                 if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 12 ) then
+                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                         k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                         k3(noState*it2+2*LC_loc(2,it3)) = 0.
                                     end if
@@ -959,7 +993,7 @@ do
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
                                 if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 12 ) then
+                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                         k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                         k3(noState*it2+2*LC_loc(2,it3)) = 0.
                                     end if
@@ -1010,6 +1044,13 @@ do
                             & SIN(PI*((t+c4*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
                         end if
                     else if (LC_loc(3,it) == 3) then
+                    else if (LC_loc(3,it) == 11) then
+                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                            x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
+                            & SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
+                            x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                            & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
+                        end if
                     else if (LC_loc(3,it) == 12) then
                         if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
                             xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
@@ -1022,15 +1063,17 @@ do
                             & COS(PI*((t+c4*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
                             & SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
                         end if
+                    else if (LC_loc(3,it) == 13) then
+                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
+                            x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
+                            & COS(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
+                            x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
+                            & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
+                        end if
                     end if
                 end do
             
                 do it2 = 1, N_loc
-                    if (LC_FLAG == 1) then
-                        if (procID == 0 .and. it2 == 1) then
-                        end if
-                    end if
-            
                     if (it2 == 1 .and. procID == 0) then
                         if (prob_flag == 1) then
                             call calc_f_pendula(BC(1), 0, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
@@ -1046,7 +1089,7 @@ do
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2
                                     if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 12 ) then
+                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                             k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                             k4(noState*it2+2*LC_loc(2,it3)) = 0.
                                         end if
@@ -1069,7 +1112,7 @@ do
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2
                                     if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 12 ) then
+                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                             k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                             k4(noState*it2+2*LC_loc(2,it3)) = 0.
                                         end if
@@ -1092,7 +1135,7 @@ do
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2
                                     if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 12 ) then
+                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
                                             k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
                                             k4(noState*it2+2*LC_loc(2,it3)) = 0.
                                         end if

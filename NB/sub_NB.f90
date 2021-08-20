@@ -1,4 +1,8 @@
 module sub_NB
+!! Fortran module for main_NB.f90 which solves the dynamic response of 
+!! a metabeam of bistable elements using Newmark-beta method.
+!!
+!! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
 
 contains
     subroutine calc_fs(BC_flag, lowerBound, upperBound, u, k, L, fs)
@@ -3079,14 +3083,142 @@ contains
     kThat(83) = kThat(83) + a(5)
     kThat(102) = kThat(102) + a(6)
 
-
     end subroutine calc_kThat
 
 
+    !=============================================================================
+    !=============================================================================
+    subroutine calc_fs_pendula(BC_flag, lowerBound, upperBound, u, k, L, fs)
+
+    implicit none
+
+    !! Data dictionary
+    integer, intent(in) :: BC_flag
+    integer, intent(in) :: lowerBound
+    integer, intent(in) :: upperBound
+    real, intent(in), dimension(lowerBound:upperBound) :: u !
+    real, intent(in), dimension(3) :: k ! k(2)=G, k(3)=m
+    real, intent(in), dimension(1) :: L
+    real, intent(out), dimension(1) :: fs
+
+    if (BC_flag == 100) then
+        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) - k(1)*u(-1) + 2*k(1)*u(0) - k(1)*u(1)) 
+    else if (BC_flag == 110) then
+        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) + k(1)*(u(0) - u(1)))
+    else if (BC_flag == 120) then
+        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) - k(1)*u(-1) + k(1)*u(0))
+    else if (BC_flag == 121) then
+        fs(1) = 0.
+    end if
+
+    end subroutine calc_fs_pendula
+
+
 
     !=============================================================================
     !=============================================================================
-    subroutine calc_du(N_inv, tol_inv, N_loc, procID, noProc, kThat, res, du, nt_it, cnt_inv, t_inv_total)
+    subroutine calc_kThat_pendula(BC_flag, lowerBound, UpperBound, u, k, L, a, kThat)
+
+    implicit none
+
+    !! Data dictionary
+    integer, intent(in) :: BC_flag
+    integer, intent(in) :: lowerBound
+    integer, intent(in) :: upperBound
+    real, intent(in), dimension(lowerBound:upperBound) :: u !
+    real, intent(in), dimension(3) :: k ! k(2)=G, k(3)=m
+    real, intent(in), dimension(1) :: L
+    real, intent(in), dimension(1) :: a
+    real, intent(out), dimension(3) :: kThat
+
+    if (BC_flag == 100) then
+        kThat(1) = -k(1)
+        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + 2*k(1)
+        kThat(3) = -k(1)
+    else if (BC_flag == 110) then
+        kThat(1) = 0.
+        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + k(1)
+        kThat(3) = -k(1)
+    else if (BC_flag == 120) then
+        kThat(1) = -k(1)
+        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + k(1)
+        kThat(3) = 0.
+    else if (BC_flag == 121) then
+        kThat(1) = 0.
+        kThat(2) = 0.
+        kThat(3) = 0.
+    end if
+
+    kThat(2) = kThat(2) + a(1)
+
+    end subroutine calc_kThat_pendula
+
+
+    !=============================================================================
+    !=============================================================================
+    subroutine calc_fs_phi4(BC_flag, lowerBound, upperBound, u, k, fs)
+
+    implicit none
+
+    ! Data dictionary:
+    integer, intent(in) :: BC_flag ! Boundary condition
+    integer, intent(in) :: lowerBound !
+    integer, intent(in) :: upperBound !
+    real, intent(in), dimension(lowerBound:upperBound) :: u !
+    real, intent(in), dimension(5) :: k !
+    real, intent(out), dimension(1) :: fs !
+
+    ! Calculation for fs
+    if (BC_flag == 100) then ! baseline, periodic
+        fs(1) = k(2) - k(1)*u(-1) + (2*k(1) + 2*k(3))*u(0) + 3*k(4)*u(0)**2 + 4*k(5)*u(0)**3 - k(1)*u(1)
+    else if (BC_flag == 110) then ! baseline, left end free
+        fs(1) = k(2) + k(1)*u(0) + 2*k(3)*u(0) + 3*k(4)*u(0)**2 + 4*k(5)*u(0)**3 - k(1)*u(1) 
+    else if (BC_flag == 120) then ! baseline, right end free
+        fs(1) = k(2) - k(1)*u(-1) + (k(1) + 2*k(3))*u(0) + 3*k(4)*u(0)**2 + 4*k(5)*u(0)**3
+    end if
+
+    end subroutine calc_fs_phi4
+
+
+    !=============================================================================
+    !=============================================================================
+    subroutine calc_kThat_phi4(BC_flag, lowerBound, upperBound, u, k, a, kThat)
+
+    implicit none
+
+    ! Data dictionary:
+    integer, intent(in) :: BC_flag ! Boundary condition
+    integer, intent(in) :: lowerBound !
+    integer, intent(in) :: upperBound !
+    real, intent(in), dimension(lowerBound:upperBound) :: u !
+    real, intent(in), dimension(5) :: k !
+    real, intent(in), dimension(1) :: a
+    real, intent(out), dimension(3) :: kThat !
+
+    kThat = 0.
+    if (BC_flag == 100) then ! baseline, periodic
+        kThat(1) = -k(1)
+        kThat(2) = 2*k(1) + 2*k(3) + 6*k(4)*u(0) + 12*k(5)*u(0)**2
+        kThat(3) = -k(1)
+    else if (BC_flag == 110) then ! baseline, left end free
+        kThat(1) = 0.
+        kThat(2) = k(1) + 2*k(3) + 6*k(4)*u(0) + 12*k(5)*u(0)**2
+        kThat(3) = -k(1)
+    else if (BC_flag == 120) then ! baseline, right end free
+        kThat(1) = -k(1)
+        kThat(2) = k(1) + 2*k(3) + 6*k(4)*u(0) + 12*k(5)*u(0)**2
+        kThat(3) = 0.
+    end if
+
+    kThat(2) = kThat(2) + a(1)
+
+    end subroutine calc_kThat_phi4
+
+
+
+    !=============================================================================
+    !=============================================================================
+    subroutine calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat, res, du, nt_it, cnt_inv, t_inv_total)
 
     use mpi
     implicit none
@@ -3096,21 +3228,22 @@ contains
     real, intent(in) :: tol_inv !
     integer, intent(in) :: n_loc ! No. of unit cells per process
     integer, intent(in) :: procID, noProc
-    real, intent(in), dimension(18*6*N_loc) :: kThat !
-    real, intent(in), dimension(6*N_loc) :: res !
-    real, intent(out), dimension(6*(N_loc+2)) :: du !
+    integer, intent(in) :: DoF
+    real, intent(in), dimension(3*DoF*DoF*N_loc) :: kThat !
+    real, intent(in), dimension(DoF*N_loc) :: res !
+    real, intent(out), dimension(DoF*(N_loc+2)) :: du !
     integer, intent(in) :: nt_it
     integer, intent(inout) :: cnt_inv
     real, intent(inout) :: t_inv_total
     ! Data dictionary:
     integer :: ierr, status(MPI_STATUS_SIZE)
-    real, dimension(6*(N_loc+2)) :: d
-    real, dimension(6*N_loc) :: g
-    real, dimension(6*N_loc) :: t
+    real, dimension(DoF*(N_loc+2)) :: d
+    real, dimension(DoF*N_loc) :: g
+    real, dimension(DoF*N_loc) :: t
     real, dimension(2) :: dn1_loc, dn2_loc 
     real, dimension(2) :: dn1, dn2
     real :: s
-    integer :: it, it2, it3, ind, ind2
+    integer :: it, it2, it3, it4, ind, ind2
     real :: t_inv_start, t_inv_end
 
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
@@ -3126,26 +3259,23 @@ contains
         end if
         dn1_loc = 0.
         dn2_loc = 0.
-        do it2 = 1, 6*N_loc
+        do it2 = 1, DoF*N_loc
             dn1_loc(1) = dn1_loc(1) + g(it2)**2
         end do
         g = 0.
         do it2 = 1, N_loc
-            ind = 6*(it2-1)
-            ind2 = 108*(it2-1)
-            do it3 = 1, 18
-                g(ind+1) = g(ind+1) + kThat(ind2+it3)*du(ind+it3)
-                g(ind+2) = g(ind+2) + kThat(ind2+18+it3)*du(ind+it3)
-                g(ind+3) = g(ind+3) + kThat(ind2+36+it3)*du(ind+it3)
-                g(ind+4) = g(ind+4) + kThat(ind2+54+it3)*du(ind+it3)
-                g(ind+5) = g(ind+5) + kThat(ind2+72+it3)*du(ind+it3)
-                g(ind+6) = g(ind+6) + kThat(ind2+90+it3)*du(ind+it3)
+            ind = DoF*(it2-1)
+            ind2 = 3*DoF*DoF*(it2-1)
+            do it3 = 1, 3*DoF
+                do it4 = 1, DoF
+                    g(ind+it4) = g(ind+it4) + kThat(ind2+3*DoF*(it4-1)+it3)*du(ind+it3)
+                end do
             end do
         end do
-        do it2 = 1, 6*N_loc
+        do it2 = 1, DoF*N_loc
             g(it2) = g(it2) - res(it2)
         end do
-        do it2 = 1, 6*N_loc
+        do it2 = 1, DoF*N_loc
             dn1_loc(2) = dn1_loc(2) + g(it2)**2
         end do
         call MPI_Allreduce(dn1_loc(1), dn1(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
@@ -3156,66 +3286,63 @@ contains
             t_inv_total = t_inv_total + t_inv_end-t_inv_start
             exit
         end if
-        do it2 = 1, 6*N_loc
-            d(it2+6) = -g(it2) + dn1(2)/dn1(1)*d(it2+6)
-            dn2_loc(2) = dn2_loc(2) + d(it2+6)*g(it2)
+        do it2 = 1, DoF*N_loc
+            d(it2+DoF) = -g(it2) + dn1(2)/dn1(1)*d(it2+DoF)
+            dn2_loc(2) = dn2_loc(2) + d(it2+DoF)*g(it2)
         end do
         if (noProc /=1) then
             if (procID == 0) then
-                call MPI_SEND(d(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                call MPI_SEND(d(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
                 & MPI_COMM_WORLD, ierr)
-                call MPI_RECV(d(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, &
+                call MPI_RECV(d(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, &
                 & MPI_COMM_WORLD, status, ierr)
             else if (procID == noProc-1) then
-                call MPI_SEND(d(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                call MPI_SEND(d(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
                 & MPI_COMM_WORLD, ierr) 
-                call MPI_RECV(d(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, &
+                call MPI_RECV(d(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, &
                 & MPI_COMM_WORLD, status, ierr)
             else
-                call MPI_SENDRECV(d(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
-                & d(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
-                call MPI_SENDRECV(d(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
-                & d(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(d(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & d(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(d(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & d(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
             end if
         end if
         t = 0.
         do it2 = 1, N_loc
-            ind = 6*(it2-1)
-            ind2 = 108*(it2-1)
-            do it3 = 1, 18
-                t(ind+1) = t(ind+1) + kThat(ind2+it3)*d(ind+it3)
-                t(ind+2) = t(ind+2) + kThat(ind2+18+it3)*d(ind+it3)
-                t(ind+3) = t(ind+3) + kThat(ind2+36+it3)*d(ind+it3)
-                t(ind+4) = t(ind+4) + kThat(ind2+54+it3)*d(ind+it3)
-                t(ind+5) = t(ind+5) + kThat(ind2+72+it3)*d(ind+it3)
-                t(ind+6) = t(ind+6) + kThat(ind2+90+it3)*d(ind+it3)
+            ind = DoF*(it2-1)
+            ind2 = 3*DoF*DoF*(it2-1)
+            do it3 = 1, 3*DoF
+                do it4 = 1, DoF
+                    t(ind+it4) = t(ind+it4) + kThat(ind2+3*DoF*(it4-1)+it3)*d(ind+it3)
+                end do
             end do
         end do
-        do it2 = 1, 6*N_loc
-            dn2_loc(1) = dn2_loc(1) + d(it2+6)*t(it2)
+        do it2 = 1, DoF*N_loc
+            dn2_loc(1) = dn2_loc(1) + d(it2+DoF)*t(it2)
         end do
         call MPI_Allreduce(dn2_loc(1), dn2(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
         s = -dn2(2)/dn2(1)
-        do it2 = 1, 6*N_loc
-            du(it2+6) = du(it2+6) + s*d(it2+6)
+        do it2 = 1, DoF*N_loc
+            du(it2+DoF) = du(it2+DoF) + s*d(it2+DoF)
         end do
 
         if (noProc /=1) then
             if (procID == 0) then
-                call MPI_SEND(du(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                call MPI_SEND(du(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
                 & MPI_COMM_WORLD, ierr)
-                call MPI_RECV(du(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, &
+                call MPI_RECV(du(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, &
                 & MPI_COMM_WORLD, status, ierr)
             else if (procID == noProc-1) then
-                call MPI_SEND(du(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                call MPI_SEND(du(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
                 & MPI_COMM_WORLD, ierr) 
-                call MPI_RECV(du(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, &
+                call MPI_RECV(du(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, &
                 & MPI_COMM_WORLD, status, ierr)
             else
-                call MPI_SENDRECV(du(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
-                & du(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
-                call MPI_SENDRECV(du(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
-                & du(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(du(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & du(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(du(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & du(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
             end if
         end if
 
@@ -3228,8 +3355,8 @@ contains
 
     !=============================================================================
     !=============================================================================
-    subroutine NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, BC, k, L, a1_loc, phat_loc, u_loc, &
-    & N_inv, tol_inv, nt_it, cnt_NR, cnt_inv, t_NR_total, t_inv_total)
+    subroutine NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, prob_flag, DoF, BC, k, L, &
+    & a1_loc, phat_loc, u_loc, N_inv, tol_inv, nt_it, cnt_NR, cnt_inv, t_NR_total, t_inv_total)
 
     use mpi
     implicit none
@@ -3239,12 +3366,14 @@ contains
     real, intent(in) :: tol_NR !
     integer, intent(in) :: N_loc ! No. of unit cells per process
     integer, intent(in) :: procID, noProc
+    integer, intent(in) :: prob_flag
+    integer, intent(in) :: DoF
     integer, intent(in), dimension(0:2) :: BC
     real, intent(in), dimension(9) :: k
     real, intent(in), dimension(4) :: L
-    real, intent(in), dimension(6*N_loc) :: a1_loc
-    real, intent(in), dimension(6*N_loc) :: phat_loc
-    real, intent(inout), dimension(6*(N_loc+2)) :: u_loc
+    real, intent(in), dimension(DoF*N_loc) :: a1_loc
+    real, intent(in), dimension(DoF*N_loc) :: phat_loc
+    real, intent(inout), dimension(DoF*(N_loc+2)) :: u_loc
     integer, intent(in) :: N_inv
     real, intent(in) :: tol_inv
     integer, intent(in) :: nt_it
@@ -3254,12 +3383,12 @@ contains
     real, intent(inout) :: t_inv_total
     ! Data dictionary:
     integer :: ierr, status(MPI_STATUS_SIZE)
-    real, dimension(6) :: fs
-    real, dimension(6*N_loc) :: res
+    real, dimension(DoF) :: fs
+    real, dimension(DoF*N_loc) :: res
     real :: resSum_loc
     real :: resSum
-    real, dimension(18*6*N_loc) :: kThat_loc
-    real, dimension(6*(N_loc+2)) :: du_loc
+    real, dimension(3*DoF*DoF*N_loc) :: kThat_loc
+    real, dimension(DoF*(N_loc+2)) :: du_loc
     integer :: it, it2, it3, ind
     real :: t_NR_start, t_NR_end
 
@@ -3270,65 +3399,103 @@ contains
         resSum_loc= 0.
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
-                call calc_fs(BC(1), 0, 11, u_loc(6*it2+1), k, L, fs)
+                if (prob_flag == 1) then
+                    call calc_fs_pendula(BC(1), 0, 1, u_loc(it2+1), k, L, fs)
+                else if (prob_flag == 2) then
+                    call calc_fs_phi4(BC(1), 0, 1, u_loc(it2+1), k, fs)
+                else if (prob_flag == 4) then
+                    call calc_fs(BC(1), 0, 11, u_loc(6*it2+1), k, L, fs)
+                end if
             else if (it2 == N_loc .and. procID == noProc-1) then
-                call calc_fs(BC(2), -6, 5, u_loc(6*it2-5), k, L, fs)
+                if (prob_flag == 1) then
+                    call calc_fs_pendula(BC(2), -1, 0, u_loc(it2), k, L, fs)
+                else if (prob_flag == 2) then
+                    call calc_fs_phi4(BC(2), -1, 0, u_loc(it2), k, fs)
+                else if (prob_flag == 4) then
+                    call calc_fs(BC(2), -6, 5, u_loc(6*it2-5), k, L, fs)
+                end if
             else
-                call calc_fs(BC(0), -6, 11, u_loc(6*it2-5), k, L, fs)
+                if (prob_flag == 1) then
+                    call calc_fs_pendula(BC(0), -1, 1, u_loc(it2), k, L, fs)
+                else if (prob_flag == 2) then
+                    call calc_fs_phi4(BC(0), -1, 1, u_loc(it2), k, fs)
+                else if (prob_flag == 4) then
+                    call calc_fs(BC(0), -6, 11, u_loc(6*it2-5), k, L, fs)
+                end if
             end if
 
-            do it3 = 1, 6
-                ind = 6*it2-6+it3
-                res(ind) = phat_loc(ind) - fs(it3) - a1_loc(ind)*u_loc(ind+6)
+            do it3 = 1, DoF
+                ind = DoF*(it2-1)+it3
+                res(ind) = phat_loc(ind) - fs(it3) - a1_loc(ind)*u_loc(ind+DoF)
 !!                resSum_loc = resSum_loc + abs(res(ind))
 !                resSum_loc = resSum_loc + res(ind)**2
             end do
         end do
-!        call MPI_Allreduce(resSum_loc, resSum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
-!!        if (procID == 0 .and. it == 31) then
-!!                write (*,*) res
-!!                write (*,*) resSum
-!!                write (*,*) du_loc
-!!                stop
-!!        end if
-!        if (resSum < tol_NR) exit
+
         if (procID == 0 .and. it == N_NR) then
             write (*,*) "WARNING: Max number of NR iterations reached at ", nt_it, "th iteration."
             write (*,*) "resSum is ", resSum
         end if
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
-                call calc_kThat(BC(1), 0, 11, u_loc(6*it2+1), k, L, a1_loc(6*it2-5), kThat_loc(18*6*(it2-1)+1))
+                if (prob_flag == 1) then
+                    call calc_kThat_pendula(BC(1), 0, 1, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 2) then
+                    call calc_kThat_phi4(BC(1), 0, 1, u_loc(DoF*it2+1), k, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 4) then
+                    call calc_kThat(BC(1), 0, 11, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                        & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                end if
             else if (it2 == N_loc .and. procID == noProc-1) then
-                call calc_kThat(BC(2), -6, 5, u_loc(6*it2-5), k, L, a1_loc(6*it2-5), kThat_loc(18*6*(it2-1)+1))
+                if (prob_flag == 1) then
+                    call calc_kThat_pendula(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 2) then
+                    call calc_kThat_phi4(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 4) then
+                    call calc_kThat(BC(2), -6, 5, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                end if
             else
-                call calc_kThat(BC(0), -6, 11, u_loc(6*it2-5), k, L, a1_loc(6*it2-5), kThat_loc(18*6*(it2-1)+1))
+                if (prob_flag == 1) then
+                    call calc_kThat_pendula(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 2) then
+                    call calc_kThat_phi4(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                else if (prob_flag == 4) then
+                    call calc_kThat(BC(0), -6, 11, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                end if
             end if
         end do
 
-        call calc_du(N_inv, tol_inv, N_loc, procID, noProc, kThat_loc, res, du_loc, nt_it, cnt_inv, t_inv_total)
+        call calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat_loc, res, du_loc, nt_it, cnt_inv, t_inv_total)
         u_loc = u_loc + du_loc
         
         if (noProc /=1) then
             if (procID == 0) then
-                call MPI_SEND(u_loc(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                call MPI_SEND(u_loc(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
                 & MPI_COMM_WORLD, ierr)
-                call MPI_RECV(u_loc(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, &
+                call MPI_RECV(u_loc(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, &
                 & MPI_COMM_WORLD, status, ierr)
             else if (procID == noProc-1) then
-                call MPI_SEND(u_loc(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                call MPI_SEND(u_loc(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
                 & MPI_COMM_WORLD, ierr) 
-                call MPI_RECV(u_loc(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, &
+                call MPI_RECV(u_loc(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, &
                 & MPI_COMM_WORLD, status, ierr)
             else
-                call MPI_SENDRECV(u_loc(7), 6, MPI_DOUBLE_PRECISION, procID-1, 0, &
-                & u_loc(1), 6, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
-                call MPI_SENDRECV(u_loc(6*N_loc+1), 6, MPI_DOUBLE_PRECISION, procID+1, 1, &
-                & u_loc(6*N_loc+7), 6, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(u_loc(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & u_loc(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, ierr)
+                call MPI_SENDRECV(u_loc(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & u_loc(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
             end if
         end if
 
-        do it2 = 1, 6*N_loc
+        do it2 = 1, DoF*N_loc
             resSum_loc = resSum_loc + abs(du_loc(it2)*res(it2))
         end do
         call MPI_Allreduce(resSum_loc, resSum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
