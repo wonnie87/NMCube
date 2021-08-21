@@ -21,6 +21,8 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
   > $ cd ../RK  
   > $ make
 
+* (Note:) If **GNU make** gives an error saying that it cannot open 'hdf5.mod,' uncomment line 7 and line 9, set an environment variable **HDF5_DIR** to the path where **HDF5** header and libraries are installed (typically, '/usr/local/'), and re-run **make** command.
+
 ## Running the program
 For both NB and RK solvers, run the following command in their respective folders.
 > $ make run NP=(number of processes) INP=(input file name)  
