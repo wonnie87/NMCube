@@ -15,13 +15,15 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
 * System prerequisites: **MPI**, **Fortran** complier, **GNU make**, **Python**, **git**, **hdf5**.
 * Clone **NM^3** repository.  
   > $ git clone https://github.com/wonnie87/NMCube  
+
 * Compile and link the programs  
   > $ cd NMCube/NB  
   > $ make  
   > $ cd ../RK  
   > $ make
 
-* (Note:) If **GNU make** gives an error saying that it cannot open 'hdf5.mod,' uncomment line 7 and line 9, set an environment variable **HDF5_DIR** to the path where **HDF5** header and libraries are installed (typically, '/usr/local/'), and re-run **make** command.
+* (Note:) If **GNU make** gives an error saying that it cannot open 'hdf5.mod' and/or find '-lhdf5,' uncomment line 7 and line 9 in **Makefile** file, set the environment variables **PATH_TO_HDF5_HEADER** and **PATH_TO_HDF5_LIB** to the paths where **HDF5** header and libraries are installed, and re-run **make** command.
+    * On my Ubuntu subsystem from Windows app store, the headers are located in **/usr/include/openmpi/**, and the libraries are located in **/usr/lib/x86_64-linux-gnu/hdf5/openmpi**.
 
 ## Running the program
 For both NB and RK solvers, run the following command in their respective folders.
@@ -36,6 +38,7 @@ If parameters **NP** and **INP** are not specified, **make run** uses **NP**=4 a
 ## Data storage
 The simulated outputs are packaged in a **HDF5** file format (.h5).
 The time displacements, velocities, and accelerations are stored in the datasets **/x**, **/xdot**, and **/xddot**, respectively.  
+
 * (Note:) For NB solver, the outputs at each time step are stored in separate datasets. The data structure will be modified to follow that of RK solver in the next revision.
 
 Use **h5dump** or **h5ls** (default command line programs supplied with **hdf5** installation) for quick data retrieval.
