@@ -1,0 +1,11 @@
+*.swp
+*~
+*.o
+*.mod
+*.inp
+*.stat
+*.h5
+*.mp4
+
+etc/*
+modules/__pycache__/*

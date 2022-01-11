@@ -1,5 +1,5 @@
-module sub_RK
-!! Fortran module for main_RK.f90 which solves the dynamic response of 
+module sub_rk
+!! Fortran module for main_rk.f90 which solves the dynamic response of 
 !! a metabeam of bistable elements using an explicit Runge-Kutta method.
 !!
 !! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
@@ -392,4 +392,4 @@ contains
     end subroutine calc_f_phi4
 
 
-end module sub_RK
+end module sub_rk

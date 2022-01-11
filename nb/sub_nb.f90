@@ -1,5 +1,5 @@
-module sub_NB
-!! Fortran module for main_NB.f90 which solves the dynamic response of 
+module sub_nb
+!! Fortran module for main_nb.f90 which solves the dynamic response of 
 !! a metabeam of bistable elements using Newmark-beta method.
 !!
 !! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
@@ -3088,7 +3088,7 @@ contains
 
     !=============================================================================
     !=============================================================================
-    subroutine calc_fs_pendula(BC_flag, lowerBound, upperBound, u, k, L, fs)
+    subroutine calc_fs_pendula(BC_flag, lowerBound, upperBound, u, G, m, k, L, fs)
 
     implicit none
 
@@ -3097,16 +3097,18 @@ contains
     integer, intent(in) :: lowerBound
     integer, intent(in) :: upperBound
     real, intent(in), dimension(lowerBound:upperBound) :: u !
-    real, intent(in), dimension(3) :: k ! k(2)=G, k(3)=m
+    real, intent(in) :: G
+    real, intent(in), dimension(2) :: m
+    real, intent(in), dimension(1) :: k
     real, intent(in), dimension(1) :: L
     real, intent(out), dimension(1) :: fs
 
     if (BC_flag == 100) then
-        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) - k(1)*u(-1) + 2*k(1)*u(0) - k(1)*u(1)) 
+        fs(1) = (G*L(1)*m(2)*Sin(u(0)) - k(1)*u(-1) + 2*k(1)*u(0) - k(1)*u(1)) 
     else if (BC_flag == 110) then
-        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) + k(1)*(u(0) - u(1)))
+        fs(1) = (G*L(1)*m(2)*Sin(u(0)) + k(1)*(u(0) - u(1)))
     else if (BC_flag == 120) then
-        fs(1) = (k(2)*L(1)*k(3)*Sin(u(0)) - k(1)*u(-1) + k(1)*u(0))
+        fs(1) = (G*L(1)*m(2)*Sin(u(0)) - k(1)*u(-1) + k(1)*u(0))
     else if (BC_flag == 121) then
         fs(1) = 0.
     end if
@@ -3117,7 +3119,7 @@ contains
 
     !=============================================================================
     !=============================================================================
-    subroutine calc_kThat_pendula(BC_flag, lowerBound, UpperBound, u, k, L, a, kThat)
+    subroutine calc_kThat_pendula(BC_flag, lowerBound, UpperBound, u, G, m, k, L, a, kThat)
 
     implicit none
 
@@ -3126,22 +3128,24 @@ contains
     integer, intent(in) :: lowerBound
     integer, intent(in) :: upperBound
     real, intent(in), dimension(lowerBound:upperBound) :: u !
-    real, intent(in), dimension(3) :: k ! k(2)=G, k(3)=m
+    real, intent(in) :: G
+    real, intent(in), dimension(2) :: m
+    real, intent(in), dimension(1) :: k
     real, intent(in), dimension(1) :: L
     real, intent(in), dimension(1) :: a
     real, intent(out), dimension(3) :: kThat
 
     if (BC_flag == 100) then
         kThat(1) = -k(1)
-        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + 2*k(1)
+        kThat(2) = G*L(1)*m(2)*COS(u(0)) + 2*k(1)
         kThat(3) = -k(1)
     else if (BC_flag == 110) then
         kThat(1) = 0.
-        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + k(1)
+        kThat(2) = G*L(1)*m(2)*COS(u(0)) + k(1)
         kThat(3) = -k(1)
     else if (BC_flag == 120) then
         kThat(1) = -k(1)
-        kThat(2) = k(2)*L(1)*k(3)*COS(u(0)) + k(1)
+        kThat(2) = G*L(1)*m(2)*COS(u(0)) + k(1)
         kThat(3) = 0.
     else if (BC_flag == 121) then
         kThat(1) = 0.
@@ -3218,7 +3222,7 @@ contains
 
     !=============================================================================
     !=============================================================================
-    subroutine calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat, res, du, nt_it, cnt_inv, t_inv_total)
+    subroutine calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat, res, du, t_sim, cnt_inv, t_inv_total)
 
     use mpi
     implicit none
@@ -3232,7 +3236,7 @@ contains
     real, intent(in), dimension(3*DoF*DoF*N_loc) :: kThat !
     real, intent(in), dimension(DoF*N_loc) :: res !
     real, intent(out), dimension(DoF*(N_loc+2)) :: du !
-    integer, intent(in) :: nt_it
+    real, intent(in) :: t_sim
     integer, intent(inout) :: cnt_inv
     real, intent(inout) :: t_inv_total
     ! Data dictionary:
@@ -3241,7 +3245,7 @@ contains
     real, dimension(DoF*N_loc) :: g
     real, dimension(DoF*N_loc) :: t
     real, dimension(2) :: dn1_loc, dn2_loc 
-    real, dimension(2) :: dn1, dn2
+    real, dimension(2) :: dn1, dn2 ! dn1(1)->d1, dn1(2)->n1
     real :: s
     integer :: it, it2, it3, it4, ind, ind2
     real :: t_inv_start, t_inv_end
@@ -3254,30 +3258,29 @@ contains
     g = -res
     do it = 1, N_inv
         if (procID == 0 .and. it == N_inv) then
-            write (*,*) "WARNING: Max number of iterations for matrix inversion reached at ", nt_it, "th iteration."
+            write (*,*) " >> WARNING: Max number of iterations for matrix inversion reached &
+                &at simulation time t=", t_sim, "."
             write (*,*) "n1 is ", dn1(2)
+            cnt_inv = cnt_inv + it
         end if
-        dn1_loc = 0.
-        dn2_loc = 0.
-        do it2 = 1, DoF*N_loc
-            dn1_loc(1) = dn1_loc(1) + g(it2)**2
-        end do
-        g = 0.
+        dn1_loc(1) = DOT_PRODUCT(g, g)
         do it2 = 1, N_loc
-            ind = DoF*(it2-1)
-            ind2 = 3*DoF*DoF*(it2-1)
-            do it3 = 1, 3*DoF
-                do it4 = 1, DoF
-                    g(ind+it4) = g(ind+it4) + kThat(ind2+3*DoF*(it4-1)+it3)*du(ind+it3)
-                end do
+            ind = 3*DoF*DoF*(it2-1)
+            do it3 = 1, DoF
+                g(DoF*(it2-1)+it3) = DOT_PRODUCT(kThat(ind+3*DoF*(it3-1)+1:ind+3*DoF*it3), &
+                    &du(DoF*(it2-1)+1:DoF*(it2+2))) - res(DoF*(it2-1)+it3)
             end do
         end do
-        do it2 = 1, DoF*N_loc
-            g(it2) = g(it2) - res(it2)
-        end do
-        do it2 = 1, DoF*N_loc
-            dn1_loc(2) = dn1_loc(2) + g(it2)**2
-        end do
+!        call MPI_ALLREDUCE(MAXVAL(ABS(g)), g_max, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+!        if (g_max < tol_inv) then
+!            cnt_inv = cnt_inv+it
+!            call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+!            t_inv_end = MPI_WTIME()
+!            t_inv_total = t_inv_total + t_inv_end - t_inv_start
+!            exit
+!        end if
+
+        dn1_loc(2) = DOT_PRODUCT(g, g)
         call MPI_Allreduce(dn1_loc(1), dn1(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
         if (dn1(2) < tol_inv) then
             cnt_inv = cnt_inv+it
@@ -3286,10 +3289,8 @@ contains
             t_inv_total = t_inv_total + t_inv_end-t_inv_start
             exit
         end if
-        do it2 = 1, DoF*N_loc
-            d(it2+DoF) = -g(it2) + dn1(2)/dn1(1)*d(it2+DoF)
-            dn2_loc(2) = dn2_loc(2) + d(it2+DoF)*g(it2)
-        end do
+        d(DoF+1:DoF*(N_loc+1)) = -g + dn1(2)/dn1(1)*d(DoF+1:DoF*(N_loc+1))
+        dn2_loc(2) = DOT_PRODUCT(d(DoF+1:DoF*(N_loc+1)), g)
         if (noProc /=1) then
             if (procID == 0) then
                 call MPI_SEND(d(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
@@ -3308,24 +3309,17 @@ contains
                 & d(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, ierr)
             end if
         end if
-        t = 0.
         do it2 = 1, N_loc
-            ind = DoF*(it2-1)
-            ind2 = 3*DoF*DoF*(it2-1)
-            do it3 = 1, 3*DoF
-                do it4 = 1, DoF
-                    t(ind+it4) = t(ind+it4) + kThat(ind2+3*DoF*(it4-1)+it3)*d(ind+it3)
-                end do
+            ind = 3*DoF*DoF*(it2-1)
+            do it3 = 1, DoF
+                t(DoF*(it2-1)+it3) = DOT_PRODUCT(kThat(ind+3*DoF*(it3-1)+1:ind+3*DoF*it3), &
+                    &d(DoF*(it2-1)+1:DoF*(it2+2)))
             end do
         end do
-        do it2 = 1, DoF*N_loc
-            dn2_loc(1) = dn2_loc(1) + d(it2+DoF)*t(it2)
-        end do
+        dn2_loc(1) = DOT_PRODUCT(d(DoF+1:DoF*(N_loc+1)), t)
         call MPI_Allreduce(dn2_loc(1), dn2(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
         s = -dn2(2)/dn2(1)
-        do it2 = 1, DoF*N_loc
-            du(it2+DoF) = du(it2+DoF) + s*d(it2+DoF)
-        end do
+        du(DoF+1:DoF*(N_loc+1)) = du(DoF+1:DoF*(N_loc+1)) + s*d(DoF+1:DoF*(N_loc+1))
 
         if (noProc /=1) then
             if (procID == 0) then
@@ -3356,7 +3350,7 @@ contains
     !=============================================================================
     !=============================================================================
     subroutine NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, prob_flag, DoF, BC, k, L, &
-    & a1_loc, phat_loc, u_loc, N_inv, tol_inv, nt_it, cnt_NR, cnt_inv, t_NR_total, t_inv_total)
+    & a1_loc, phat_loc, u_loc, N_inv, tol_inv, t_sim, cnt_NR, cnt_inv, t_NR_total, t_inv_total, G, m_loc)
 
     use mpi
     implicit none
@@ -3376,11 +3370,13 @@ contains
     real, intent(inout), dimension(DoF*(N_loc+2)) :: u_loc
     integer, intent(in) :: N_inv
     real, intent(in) :: tol_inv
-    integer, intent(in) :: nt_it
+    real, intent(in) :: t_sim
     integer, intent(out) :: cnt_NR
     integer, intent(out) :: cnt_inv
     real, intent(inout) :: t_NR_total
     real, intent(inout) :: t_inv_total
+    real, intent(in), optional :: G
+    real, intent(in), dimension(2*N_loc), optional :: m_loc
     ! Data dictionary:
     integer :: ierr, status(MPI_STATUS_SIZE)
     real, dimension(DoF) :: fs
@@ -3396,11 +3392,11 @@ contains
     t_NR_start = MPI_WTIME()
     cnt_inv = 0
     do it = 1, N_NR
-        resSum_loc= 0.
+        !resSum_loc= 0.
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
                 if (prob_flag == 1) then
-                    call calc_fs_pendula(BC(1), 0, 1, u_loc(it2+1), k, L, fs)
+                    call calc_fs_pendula(BC(1), 0, 1, u_loc(it2+1), G, m_loc(2*it2-1), k, L, fs)
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(1), 0, 1, u_loc(it2+1), k, fs)
                 else if (prob_flag == 4) then
@@ -3408,7 +3404,7 @@ contains
                 end if
             else if (it2 == N_loc .and. procID == noProc-1) then
                 if (prob_flag == 1) then
-                    call calc_fs_pendula(BC(2), -1, 0, u_loc(it2), k, L, fs)
+                    call calc_fs_pendula(BC(2), -1, 0, u_loc(it2), G, m_loc(2*it2-1), k, L, fs)
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(2), -1, 0, u_loc(it2), k, fs)
                 else if (prob_flag == 4) then
@@ -3416,7 +3412,7 @@ contains
                 end if
             else
                 if (prob_flag == 1) then
-                    call calc_fs_pendula(BC(0), -1, 1, u_loc(it2), k, L, fs)
+                    call calc_fs_pendula(BC(0), -1, 1, u_loc(it2), G, m_loc(2*it2-1), k, L, fs)
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(0), -1, 1, u_loc(it2), k, fs)
                 else if (prob_flag == 4) then
@@ -3424,34 +3420,50 @@ contains
                 end if
             end if
 
-            do it3 = 1, DoF
-                ind = DoF*(it2-1)+it3
-                res(ind) = phat_loc(ind) - fs(it3) - a1_loc(ind)*u_loc(ind+DoF)
-!!                resSum_loc = resSum_loc + abs(res(ind))
-!                resSum_loc = resSum_loc + res(ind)**2
-            end do
+            ind = DoF*(it2-1)
+            res(ind+1:ind+DoF) = phat_loc(ind+1:ind+DoF) - fs - a1_loc(ind+1:ind+DoF)*&
+                &u_loc(ind+DoF+1:ind+2*DoF)
+!            do it3 = 1, DoF
+!                ind = DoF*(it2-1)+it3
+!                res(ind) = phat_loc(ind) - fs(it3) - a1_loc(ind)*u_loc(ind+DoF)
+!!!                resSum_loc = resSum_loc + abs(res(ind))
+!!                resSum_loc = resSum_loc + res(ind)**2
+!            end do
         end do
 
-        if (procID == 0 .and. it == N_NR) then
-            write (*,*) "WARNING: Max number of NR iterations reached at ", nt_it, "th iteration."
-            write (*,*) "resSum is ", resSum
+        resSum_loc = DOT_PRODUCT(res, res)
+        call MPI_Allreduce(resSum_loc, resSum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+        if (resSum < tol_NR) then
+            cnt_NR = it
+            call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+            t_NR_end = MPI_WTIME()
+            t_NR_total = t_NR_total + t_NR_end - t_NR_start
+            exit
         end if
+
+        if (procID == 0 .and. it == N_NR) then
+            write (*,*) "WARNING: Max number of NR iterations reached at siumaltion time &
+                &t=", t_sim, "."
+            write (*,*) "resSum is ", resSum
+            cnt_NR = it
+        end if
+        
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
                 if (prob_flag == 1) then
-                    call calc_kThat_pendula(BC(1), 0, 1, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
-                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                    call calc_kThat_pendula(BC(1), 0, 1, u_loc(DoF*it2+1), G, m_loc(2*it2-1), k, L, &
+                    & a1_loc(DoF*(it2-1)+1), kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 2) then
                     call calc_kThat_phi4(BC(1), 0, 1, u_loc(DoF*it2+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 4) then
                     call calc_kThat(BC(1), 0, 11, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
-                        & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 end if
             else if (it2 == N_loc .and. procID == noProc-1) then
                 if (prob_flag == 1) then
-                    call calc_kThat_pendula(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
-                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                    call calc_kThat_pendula(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), G, m_loc(2*it2-1), k, L,&
+                    & a1_loc(DoF*(it2-1)+1), kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 2) then
                     call calc_kThat_phi4(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
@@ -3461,8 +3473,8 @@ contains
                 end if
             else
                 if (prob_flag == 1) then
-                    call calc_kThat_pendula(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
-                    & kThat_loc(3*DoF*DoF*(it2-1)+1))
+                    call calc_kThat_pendula(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), G, m_loc(2*it2-1), k, L,&
+                    & a1_loc(DoF*(it2-1)+1), kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 2) then
                     call calc_kThat_phi4(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
@@ -3473,7 +3485,7 @@ contains
             end if
         end do
 
-        call calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat_loc, res, du_loc, nt_it, cnt_inv, t_inv_total)
+        call calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat_loc, res, du_loc, t_sim, cnt_inv, t_inv_total)
         u_loc = u_loc + du_loc
         
         if (noProc /=1) then
@@ -3495,21 +3507,21 @@ contains
             end if
         end if
 
-        do it2 = 1, DoF*N_loc
-            resSum_loc = resSum_loc + abs(du_loc(it2)*res(it2))
-        end do
-        call MPI_Allreduce(resSum_loc, resSum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
-        if (resSum < tol_NR) then
-            cnt_NR = it
-            call MPI_BARRIER(MPI_COMM_WORLD, ierr)
-            t_NR_end = MPI_WTIME()
-            t_NR_total = t_NR_total + t_NR_end - t_NR_start
-            exit
-        end if
+!        do it2 = 1, DoF*N_loc
+!            resSum_loc = resSum_loc + abs(du_loc(it2)*res(it2))
+!        end do
+!        call MPI_Allreduce(resSum_loc, resSum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+!        if (resSum < tol_NR) then
+!            cnt_NR = it
+!            call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+!            t_NR_end = MPI_WTIME()
+!            t_NR_total = t_NR_total + t_NR_end - t_NR_start
+!            exit
+!        end if
 
     end do
 
     end subroutine NR_iterations
 
 
-end module sub_NB
+end module sub_nb
