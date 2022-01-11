@@ -102,6 +102,17 @@ If finer control of the resulting video is desired, modify and run the supplied 
 > $ python3 MovieGen.py
 
 
+## Troubleshooting
+1. `make movie` produces **TypeError: __init__() got an unexpected keyword argument 'extra_args'** &rarr; Install **ffmpeg** to your system  
+    * Debian or Ubuntu-based Linux:  
+        > $ sudo apt install ffmpeg  
+    * RedHat-based Linux:  
+        > $ sudo dnf install ffmpeg  
+    * MacOS:  
+        > $ brew install ffmpeg  
+    * Windows: Same as those for the Ubuntu-based Linux if using the Ubuntu app.  
+
+
 ## File description
 ```
 .

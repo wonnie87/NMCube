@@ -1,7 +1,7 @@
 import numpy as np
 import h5py
 
-def NumStabilityChk():
+def NumStabilityChk(nproc):
     """..."""
     import os
     from modules import InpGen as ig
@@ -26,7 +26,7 @@ def NumStabilityChk():
             print(f" >> Running the NB solver.")
             os.system('mv numMethod.inp numMethod.inp.bak')
             ig.MethodGen(lines1[9].rstrip(), lines1[11].rstrip(), lines1[13].rstrip(), lines1[15].rstrip(), "NB")
-            os.system('make skipIG')
+            os.system(f'make skipIG NP={nproc}')
             os.system('mv numMethod.inp.bak numMethod.inp')
             f_NB = h5py.File(f"./outputs/{filename}_NB.h5", 'r')
 

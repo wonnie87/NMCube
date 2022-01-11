@@ -47,7 +47,7 @@ skipIG:
 	fi;
 
 check:
-	@$(PY) -c "from modules.postprocessing import NumStabilityChk; NumStabilityChk()";
+	@$(PY) -c "from modules.postprocessing import NumStabilityChk; NumStabilityChk($(NP))";
 #	$(PY) ./modules/NumStabilityCheck.py $(sed -n '2p' design.py)
 
 movie:

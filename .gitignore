@@ -2,6 +2,7 @@
 *~
 *.o
 *.mod
+*.exe
 *.inp
 *.stat
 *.h5
