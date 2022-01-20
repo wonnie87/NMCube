@@ -27,7 +27,7 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
         > $ brew install open-mpi hdf5-mpi  
         > $ pip3 install --user numpy matplotlib h5py
 
-    * Windows: **NM^3** is not natively supported in Windows. The simplest way to use **NM^3** in Windows is through the Ubuntu app in Microsoft Store, which allows to use Ubuntu terminal. Once it is installed, run the app and follow the same procedure for the Debian or Ubuntu-based Linux system.
+    * Windows: **NM^3** is not natively supported on Windows. The simplest way to use **NM^3** on Windows is through the Ubuntu app from Microsoft Store, which allows to use Ubuntu terminal. Once it is installed, run the app and follow the same procedure for the Debian or Ubuntu-based Linux system.
 
 2. Clone **NM^3** repository.
 
@@ -41,7 +41,7 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
 
 
 4. (Note:) If **GNU make** gives an error saying that it cannot open 'hdf5.mod' and/or find '-lhdf5,' uncomment line 9 and line 14 in **Makefile** file, set the environment variables **PATH_TO_HDF5_HEADER** and **PATH_TO_HDF5_LIB** to the paths where **HDF5** header and libraries are installed, and re-run `make` command.
-The following are the default directories in each operating system.
+The following are the default directories on each operating system.
 
     * Debian or Ubuntu-based Linux:
         * Header &rarr; /usr/include/hdf5/openmpi
@@ -103,7 +103,7 @@ If finer control of the resulting video is desired, modify and run the supplied 
 
 
 ## Troubleshooting
-1. `make movie` produces **TypeError: __init__() got an unexpected keyword argument 'extra_args'** &rarr; Install **ffmpeg** to your system  
+1. `make movie` produces **TypeError: __init__() got an unexpected keyword argument 'extra_args'** &rarr; Install **ffmpeg** on your system  
     * Debian or Ubuntu-based Linux:  
         > $ sudo apt install ffmpeg  
     * RedHat-based Linux:  
