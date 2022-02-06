@@ -9,10 +9,10 @@ endif
 #I_FLAG = -I${PATH_TO_HDF5_HEADER} # specify path to HDF5 library if not in the default path.
 #I_FLAG = -I/usr/include/hdf5/openmpi # Example path for Deb-based Linux
 #I_FLAG = -I/usr/local/Cellar/hdf5-mpi/1.12.1/include # Example path for MacOS 
-L_FLAG = -lhdf5_fortran -lhdf5 -lz
-#L_FLAG = -L${PATH_TO_HDF5_LIB} -lhdf5_fortran -lhdf5 -lz # specify path to HDF5 library if not in the default path.
-#L_FLAG = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5_fortran -lhdf5 -lz # Example path for Deb-based Linux
-#L_FLAG = -L/usr/local/Cellar/hdf5-mpi/1.12.1/lib -lhdf5_fortran -lhdf5 -lz # Example path for MacOS 
+L_FLAG = -lhdf5_fortran
+#L_FLAG = -L${PATH_TO_HDF5_LIB} -lhdf5_fortran # specify path to HDF5 library if not in the default path.
+#L_FLAG = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5_fortran # Example path for Deb-based Linux
+#L_FLAG = -L/usr/local/Cellar/hdf5-mpi/1.12.1/lib -lhdf5_fortran # Example path for MacOS 
 MPIRUN = mpirun
 MPIRUN_FLAG = -np
 NP = 4
