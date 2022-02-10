@@ -20,7 +20,11 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
         > $ sudo apt install python3-numpy python3-matplotlib python3-h5py  
         > $ sudo apt install libhdf5-openmpi-dev hdf5-tools
 
-    * RedHat-based Linux (e.g., Fedora, Oracle): Install the required packages with **dnf** package management tool. More details to be updaded.
+    * RedHat-based Linux (e.g., Fedora, Oracle): Install the required packages with **dnf** package management tool.  
+
+        > $ sudo dnf install gcc-gfortran openmpi openmpi-devel make git  
+        > $ sudo dnf install python3-numpy python3-matplotlib python3-h5py  
+        > $ sudo dnf install hdf5-openmpi-devel
 
     * MacOS: **Fortran** compiler, **GNU make**, **git**, and **Python** are already installed in most cases. We recommend using **Homebrew** to install **MPI** and **hdf5**. First, go to [https://brew.sh](https://brew.sh) and follow the instruction to install **Homebrew**. Then, install the required packages with `brew` and **Python**'s `pip3` commands.  
 
@@ -40,15 +44,17 @@ Currently, three types of multi-stable systems can be solved with **NM^3**: (1) 
     > $ make  
 
 
-4. (Note:) If **GNU make** gives an error saying that it cannot open 'hdf5.mod' and/or find '-lhdf5,' uncomment line 9 and line 14 in **Makefile** file, set the environment variables **PATH_TO_HDF5_HEADER** and **PATH_TO_HDF5_LIB** to the paths where **HDF5** header and libraries are installed, and re-run `make` command.
+4. NOTE: If **GNU make** gives an error saying that it cannot open 'hdf5.mod' and/or find '-lhdf5,' uncomment line 10 and line 15 in **Makefile** file, set the environment variables **DIR_TO_HDF5_HEADER** and **DIR_TO_HDF5_LIB** to the paths where **HDF5** headers and libraries are installed, and re-run `make` command.
 The following are the default directories on each operating system.
 
     * Debian or Ubuntu-based Linux:
-        * Header &rarr; /usr/include/hdf5/openmpi
+        * Headers &rarr; /usr/include/hdf5/openmpi
         * Libraries &rarr; /usr/lib/x86_64-linux-gnu/hdf5/openmpi  
-    * RedHat-based Linux: (To be updated)  
+    * RedHat-based Linux:
+        * Headers &rarr; /usr/lib64/gfortran/modules/openmpi  
+        * Libraries &rarr; /usr/lib64/openmpi/lib  
     * MacOS:
-        * Header &rarr; /usr/local/Cellar/hdf5-mpi/(version)/include
+        * Headers &rarr; /usr/local/Cellar/hdf5-mpi/(version)/include
         * Libraries &rarr; /usr/local/Cellar/hdf-mpi/(version)/lib  
     * Windows: Same as those for the Ubuntu-based Linux if using the Ubuntu app.
 <!--* On my Ubuntu subsystem from Windows app store, the headers are located in **/usr/include/openmpi/**, and the libraries are located in **/usr/lib/x86_64-linux-gnu/hdf5/openmpi**.-->
@@ -82,7 +88,7 @@ The output file is automatically saved in **outputs/** directory.
 
 ## Postprocessing
 Use **h5dump** or **h5ls** (default command line programs supplied with **hdf5** installation) for quick data retrieval.
-For example, to view the entire time displacements of a file **P4_d04_F0.1_f8.0_RK4.h5**:
+For example, to view the entire time displacements of a file **P4_d04_F0.1_f8.0_RK4.h5**:  
 > $ h5dump -d "/u" P4_d04_F0.1_f8.0_RK4.h5
 
 For more involved postprocessing, use more advanced tools, such as **Python**'s **h5py** library.
@@ -90,7 +96,7 @@ Example **Python** scripts can be found in **outputs/** directory.
 
 
 **NM^3** can also generate a video of an output file by running **`make movie`** in the top-most directory.
-For example, the following command creates a video file named **P4_d04_F1.4_f35.0_RK4.mp4** in **outputs/** directory.
+For example, the following command creates a video file named **P4_d04_F1.4_f35.0_RK4.mp4** in **outputs/** directory.  
 > $ make movie OUT=P4_d04_F1.4_f35.0_RK4.h5 FSKIP=10
 
 With **`make movie`**, the video play speed can be controlled with the **FSKIP** parameter.
@@ -98,7 +104,7 @@ The higher **FSKIP**, the faster the video plays.
 By default, **`make movie`** uses **FSKIP**=100.
 
 
-If finer control of the resulting video is desired, modify and run the supplied **Python** script in the **outputs/** directory to override the default behavior.
+If finer control of the resulting video is desired, modify and run the supplied **Python** script in the **outputs/**   directory to override the default behavior.
 > $ python3 MovieGen.py
 
 
@@ -106,11 +112,14 @@ If finer control of the resulting video is desired, modify and run the supplied 
 1. `make movie` produces **TypeError: __init__() got an unexpected keyword argument 'extra_args'** &rarr; Install **ffmpeg** on your system  
     * Debian or Ubuntu-based Linux:  
         > $ sudo apt install ffmpeg  
-    * RedHat-based Linux:  
+    * RedHat-based Linux: Enable RPM fusion and then run the following command.  
         > $ sudo dnf install ffmpeg  
     * MacOS:  
         > $ brew install ffmpeg  
     * Windows: Same as those for the Ubuntu-based Linux if using the Ubuntu app.  
+
+2. On some systems, `make` gives an error "**make[1]: mpif90: No such file or directory**" during the compilation or "**make[2]: mpirun: No such file or directory**" during the runtime. This is because `mpif90` and `mpirun` are not in your system PATH. &rarr; Set **MPIF** and **MPIRUN** variable in Makefile to the exact path to `mpif90` and `mpirun`, respectively.
+    * This error most likely occurs on Fedora. On Fedora, the default installation path is **/usr/lib64/openmpi/bin/mpif90** and **/usr/lib64/openmpi/bin/mpirun**.
 
 
 ## File description
