@@ -410,7 +410,7 @@ if (procID == 0) then
             else if (prob_flag == 2) then
                 call calc_fs_phi4(BC(1), 0, 1, u(it), k, fs)
             else if (prob_flag == 4) then
-                call calc_fs(BC(1), 0, 11, u(6*it-5), k, L, fs)
+                call calc_fs_metabeam(BC(1), 0, 11, u(6*it-5), k, L, fs)
             end if
         else if (it == N_global) then
             if (prob_flag == 1) then
@@ -418,7 +418,7 @@ if (procID == 0) then
             else if (prob_flag == 2) then
                 call calc_fs_phi4(BC(2), -1, 0, u(it-1), k, fs)
             else if (prob_flag == 4) then
-                call calc_fs(BC(2), -6, 5, u(6*it-11), k, L, fs)
+                call calc_fs_metabeam(BC(2), -6, 5, u(6*it-11), k, L, fs)
             end if
         else
             if (prob_flag == 1) then
@@ -426,7 +426,7 @@ if (procID == 0) then
             else if (prob_flag == 2) then
                 call calc_fs_phi4(BC(0), -1, 1, u(it-1), k, fs)
             else if (prob_flag == 4) then
-                call calc_fs(BC(0), -6, 11, u(6*it-11), k, L, fs)
+                call calc_fs_metabeam(BC(0), -6, 11, u(6*it-11), k, L, fs)
             end if
         end if
 
@@ -638,51 +638,16 @@ do
     t = t + dt
     p_loc = 0.
     phat_loc = 0.
-    do it2 = 1, LC_loc_dim2
-        if ( LC_loc(3,it2) == 1) then
-            if ( t >= LC_val_loc(1,it2) .and. t <= LC_val_loc(2,it2) ) then
-                f_val_loc(it2) = LC_val_loc(3,it2)*SIN(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))
-                p_loc( DoF*(LC_loc(1,it2)-1) + LC_loc(2,it2) ) = f_val_loc(it2)
-            end if
-        else if (LC_loc(3,it2) == 2) then
-            if ( t >= LC_val_loc(1,it2) .and. t <= LC_val_loc(2,it2) ) then
-                f_val_loc(it2) = LC_val_loc(3,it2)*SIN(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))*&
-                & SIN(PI*(t-LC_val_loc(1,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)))**2
-                p_loc( DoF*(LC_loc(1,it2)-1) + LC_loc(2,it2) ) = f_val_loc(it2)
-            end if
-        else if (LC_loc(3,it2) == 3) then
-        else if (LC_loc(3,it2) == 11) then !!! To be implemented
-            if ( t >= LC_val_loc(1,it2) .and. t <= LC_val_loc(2,it2) ) then
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)-1) = LC_val_loc(3,it2)*&
-                & SIN(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)) = 2*PI*LC_val_loc(4,it2)*&
-                & LC_val_loc(3,it2)*COS(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))
-            end if
-        else if (LC_loc(3,it2) == 12) then !!! To be implemented
-            if ( t >= LC_val_loc(1,it2) .and. t <= LC_val_loc(2,it2) ) then
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)-1) = LC_val_loc(3,it2)*&
-                & SIN(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))*&
-                & SIN(PI*(t-LC_val_loc(1,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)))**2
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)) = 2*LC_val_loc(3,it2)*PI*&
-                & SIN(PI*(t-LC_val_loc(1,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)))*&
-                & ( LC_val_loc(4,it2)*COS(2*PI*LC_val_loc(4,it2)*t+LC_val_loc(5,it2))*&
-                & SIN(PI*(t-LC_val_loc(1,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)))+&
-                & COS(PI*(t-LC_val_loc(1,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)))*&
-                & SIN(2*PI*LC_val_loc(4,it2)*t+LC_val_loc(5,it2))/(LC_val_loc(2,it2)-LC_val_loc(1,it2)) )
-            end if
-        else if (LC_loc(3,it2) == 13) then !!! To be implemented
-            if ( t >= LC_val_loc(1,it2) .and. t <= LC_val_loc(2,it2) ) then
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)-1) = L(4) - LC_val_loc(3,it2)*&
-                & COS(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))
-                u_loc(DoF*LC_loc(1,it2)+LC_loc(2,it2)) = 2*PI*LC_val_loc(4,it2)*&
-                & LC_val_loc(3,it2)*SIN(2*PI*LC_val_loc(4,it2)*t + LC_val_loc(5,it2))
-            end if
-        end if
+    do it = 1, LC_loc_dim2
+        call calc_load(LC_loc(1,it), LC_val_loc(1,it), t, L, &
+            & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
+            & u_loc( DoF*LC_loc(1,it)+LC_loc(2,it) ) )
+        f_val_loc(it) = p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) )
     end do 
 
-    do it2 = 1, DoF*N_loc
-        phat_loc(it2) = p_loc(it2) + a1_loc(it2)*u_loc(it2+DoF) + a2_loc(it2)*udot_loc(it2) + &
-        & a3_loc(it2)*uddot_loc(it2)
+    do it = 1, DoF*N_loc
+        phat_loc(it) = p_loc(it) + a1_loc(it)*u_loc(it+DoF) + a2_loc(it)*udot_loc(it) + &
+        & a3_loc(it)*uddot_loc(it)
     end do
     uOld_loc = u_loc
 

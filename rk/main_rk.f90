@@ -18,8 +18,9 @@ use sub_rk
 implicit none
 !include 'mpif.h' ! if 'use mpi' does not work
 
+!! Data dictionary: Pointers
+!procedure (calc_f_metabeam), pointer :: p_calc_f => NULL()
 !! Data dictionary: Constants
-real, parameter :: PI=3.141592653589793
 !! Data dictionary: MPI-related
 integer :: mpi_ierr, noProc, procID, status(MPI_STATUS_SIZE), mpi_errcode
 integer, allocatable, dimension(:) :: scatter_sc, scatter_sc2, scatter_sc3 ! number of data to be sent for each process for MPI_SCATTERV
@@ -595,45 +596,10 @@ do
     !! Calculate k1
     p_loc = 0.
     do it = 1, LC_loc_dim2
-        if ( LC_loc(3,it) == 1) then
-            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                f_val_loc(it) = LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
-                p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = f_val_loc(it)
-            end if
-        else if (LC_loc(3,it) == 2) then
-            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                f_val_loc(it) = LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))*&
-                & SIN(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))**2
-                p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = f_val_loc(it)
-            end if
-        else if (LC_loc(3,it) == 3) then
-        else if (LC_loc(3,it) == 11) then
-            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                & SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
-            end if
-        else if (LC_loc(3,it) == 12) then
-            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                & SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))*&
-                & SIN(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))**2
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*LC_val_loc(3,it)*PI*&
-                & SIN(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                & ( LC_val_loc(4,it)*COS(2*PI*LC_val_loc(4,it)*t+LC_val_loc(5,it))*&
-                & SIN(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
-                & COS(PI*(t-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                & SIN(2*PI*LC_val_loc(4,it)*t+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
-            end if
-        else if (LC_loc(3,it) == 13) then
-            if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
-                & COS(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
-                x_loc(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*t + LC_val_loc(5,it))
-            end if
-        end if
+        call calc_load(LC_loc(1,it), LC_val_loc(1,it), 0., t, dt, L, &
+            & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
+            & x_loc( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
+        f_val_loc(it) = p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) )
     end do
             
     do it2 = 1, N_loc
@@ -644,9 +610,8 @@ do
             else if (prob_flag == 2) then
                 call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                 & k, x_loc(2*it2+1), k1(2*it2+1))
-            else if (prob_flag == 3) then
             else if (prob_flag == 4) then
-                call calc_f(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                 & k, L, x_loc(12*it2+1), k1(noState*it2+1)) 
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
@@ -666,10 +631,8 @@ do
             else if (prob_flag == 2) then
                 call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
                 & k, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 3) then
-
             else if (prob_flag == 4) then
-                call calc_f(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                 & k, L, x_loc(12*it2-11), k1(noState*it2+1))
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
@@ -689,10 +652,8 @@ do
             else if (prob_flag == 2) then
                 call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                 & k, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 3) then
-
             else if (prob_flag == 4) then
-                call calc_f(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                 & k, L, x_loc(12*it2-11), k1(noState*it2+1))
                 if ( LC_loc_dim2 > 0) then
                     do it3 = 1, LC_loc_dim2
@@ -749,45 +710,9 @@ do
 
         p_loc = 0.
         do it = 1, LC_loc_dim2
-            if ( LC_loc(3,it) == 1) then
-                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                    p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                    & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
-                end if
-            else if (LC_loc(3,it) == 2) then
-                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                    p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                    & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))*&
-                    & SIN(PI*((t+c2*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
-                end if
-            else if (LC_loc(3,it) == 3) then
-            else if (LC_loc(3,it) == 11) then
-                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                    & SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                    & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
-                end if
-            else if (LC_loc(3,it) == 12) then
-                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                    & SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))*&
-                    & SIN(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))**2
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*LC_val_loc(3,it)*PI*&
-                    & SIN(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                    & ( LC_val_loc(4,it)*COS(2*PI*LC_val_loc(4,it)*(t+c2*dt)+LC_val_loc(5,it))*&
-                    & SIN(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
-                    & COS(PI*((t+c2*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                    & SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
-                end if
-            else if (LC_loc(3,it) == 13) then
-                if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
-                    & COS(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
-                    xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                    & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c2*dt) + LC_val_loc(5,it))
-                end if
-            end if
+            call calc_load(LC_loc(1,it), LC_val_loc(1,it), c2, t, dt, L, &
+                & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
+                & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
         end do
             
         do it2 = 1, N_loc
@@ -798,10 +723,8 @@ do
                 else if (prob_flag == 2) then
                     call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                     & k, xTmp(2*it2+1), k2(2*it2+1))
-                else if (prob_flag == 3) then
-
                 else if (prob_flag == 4) then
-                    call calc_f(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                    call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                     & k, L, xTmp(12*it2+1), k2(noState*it2+1)) 
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
@@ -821,10 +744,8 @@ do
                 else if (prob_flag == 2) then
                     call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
                     & k, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 3) then
-
                 else if (prob_flag == 4) then
-                    call calc_f(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                    call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                     & k, L, xTmp(12*it2-11), k2(noState*it2+1))
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
@@ -844,10 +765,8 @@ do
                 else if (prob_flag == 2) then
                     call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                     & k, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 3) then
-
                 else if (prob_flag == 4) then
-                    call calc_f(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                    call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                     & k, L, xTmp(12*it2-11), k2(noState*it2+1))
                     if ( LC_loc_dim2 > 0) then
                         do it3 = 1, LC_loc_dim2
@@ -891,45 +810,9 @@ do
 
             p_loc = 0.
             do it = 1, LC_loc_dim2
-                if ( LC_loc(3,it) == 1) then
-                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                        p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                        & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
-                    end if
-                else if (LC_loc(3,it) == 2) then
-                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                        p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                        & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))*&
-                        & SIN(PI*((t+c3*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
-                    end if
-                else if (LC_loc(3,it) == 3) then
-                else if (LC_loc(3,it) == 11) then
-                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                        & SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                        & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
-                    end if
-                else if (LC_loc(3,it) == 12) then
-                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                        & SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))*&
-                        & SIN(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))**2
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*LC_val_loc(3,it)*PI*&
-                        & SIN(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                        & ( LC_val_loc(4,it)*COS(2*PI*LC_val_loc(4,it)*(t+c3*dt)+LC_val_loc(5,it))*&
-                        & SIN(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
-                        & COS(PI*((t+c3*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                        & SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
-                    end if
-                else if (LC_loc(3,it) == 13) then
-                    if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
-                        & COS(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
-                        xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                        & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c3*dt) + LC_val_loc(5,it))
-                    end if
-                end if
+                call calc_load(LC_loc(1,it), LC_val_loc(1,it), c3, t, dt, L, &
+                    & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
+                    & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
             end do
             
             do it2 = 1, N_loc
@@ -940,10 +823,8 @@ do
                     else if (prob_flag == 2) then
                         call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                         & k, xTmp(2*it2+1), k3(2*it2+1))
-                    else if (prob_flag == 3) then
-
                     else if (prob_flag == 4) then
-                        call calc_f(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                        call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                         & k, L, xTmp(12*it2+1), k3(noState*it2+1)) 
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
@@ -963,10 +844,8 @@ do
                     else if (prob_flag == 2) then
                         call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
                         & k, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 3) then
-
                     else if (prob_flag == 4) then
-                        call calc_f(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                        call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                         & k, L, xTmp(12*it2-11), k3(noState*it2+1))
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
@@ -986,10 +865,8 @@ do
                     else if (prob_flag == 2) then
                         call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                         & k, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 3) then
-
                     else if (prob_flag == 4) then
-                        call calc_f(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                        call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                         & k, L, xTmp(12*it2-11), k3(noState*it2+1))
                         if ( LC_loc_dim2 > 0) then
                             do it3 = 1, LC_loc_dim2
@@ -1033,45 +910,9 @@ do
 
                 p_loc = 0.
                 do it = 1, LC_loc_dim2
-                    if ( LC_loc(3,it) == 1) then
-                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                            p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                            & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
-                        end if
-                    else if (LC_loc(3,it) == 2) then
-                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                            p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ) = &
-                            & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))*&
-                            & SIN(PI*((t+c4*dt)-LC_val_loc(6,it))/(LC_val_loc(7,it)-LC_val_loc(6,it)))**2
-                        end if
-                    else if (LC_loc(3,it) == 3) then
-                    else if (LC_loc(3,it) == 11) then
-                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                            & SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                            & LC_val_loc(3,it)*COS(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
-                        end if
-                    else if (LC_loc(3,it) == 12) then
-                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = LC_val_loc(3,it)*&
-                            & SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))*&
-                            & SIN(PI*((t+c4*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))**2
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*LC_val_loc(3,it)*PI*&
-                            & SIN(PI*((t+c4*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                            & ( LC_val_loc(4,it)*COS(2*PI*LC_val_loc(4,it)*(t+c4*dt)+LC_val_loc(5,it))*&
-                            & SIN(PI*((t+c4*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))+&
-                            & COS(PI*((t+c4*dt)-LC_val_loc(1,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)))*&
-                            & SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt)+LC_val_loc(5,it))/(LC_val_loc(2,it)-LC_val_loc(1,it)) )
-                        end if
-                    else if (LC_loc(3,it) == 13) then
-                        if ( t >= LC_val_loc(1,it) .and. t <= LC_val_loc(2,it) ) then
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)-1) = L(4) - LC_val_loc(3,it)*&
-                            & COS(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
-                            xTmp(noState*LC_loc(1,it)+2*LC_loc(2,it)) = 2*PI*LC_val_loc(4,it)*&
-                            & LC_val_loc(3,it)*SIN(2*PI*LC_val_loc(4,it)*(t+c4*dt) + LC_val_loc(5,it))
-                        end if
-                    end if
+                    call calc_load(LC_loc(1,it), LC_val_loc(1,it), c4, t, dt, L, &
+                        & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
+                        & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
                 end do
             
                 do it2 = 1, N_loc
@@ -1082,10 +923,8 @@ do
                         else if (prob_flag == 2) then
                             call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                             & k, xTmp(2*it2+1), k4(2*it2+1))
-                        else if (prob_flag == 3) then
-
                         else if (prob_flag == 4) then
-                            call calc_f(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                            call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                             & k, L, xTmp(12*it2+1), k4(noState*it2+1)) 
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2
@@ -1105,10 +944,8 @@ do
                         else if (prob_flag == 2) then
                             call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
                             & k, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 3) then
-
                         else if (prob_flag == 4) then
-                            call calc_f(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                            call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                             & k, L, xTmp(12*it2-11), k4(noState*it2+1))
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2
@@ -1128,10 +965,8 @@ do
                         else if (prob_flag == 2) then
                             call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
                             & k, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 3) then
-
                         else if (prob_flag == 4) then
-                            call calc_f(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
+                            call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
                             & k, L, xTmp(12*it2-11), k4(noState*it2+1))
                             if ( LC_loc_dim2 > 0) then
                                 do it3 = 1, LC_loc_dim2

@@ -4,10 +4,12 @@ module sub_rk
 !!
 !! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
 
-contains
-    subroutine calc_f(BC_flag, lowerBound, upperBound, m, b, p, k, L, x, f)
+implicit none
+private
+public :: calc_f_metabeam, calc_f_pendula, calc_f_phi4, calc_load
 
-    implicit none
+contains
+    subroutine calc_f_metabeam(BC_flag, lowerBound, upperBound, m, b, p, k, L, x, f)
 
     !! Data dictionary
     integer, intent(in) :: BC_flag
@@ -477,12 +479,10 @@ contains
 
     end if
 
-    end subroutine calc_f
+    end subroutine calc_f_metabeam
 
 
     subroutine calc_f_pendula(BC_flag, lowerBound, upperBound, m, b, p, G, k, L, x, f)
-
-    implicit none
 
     !! Data dictionary
     integer, intent(in) :: BC_flag
@@ -516,8 +516,6 @@ contains
 
     subroutine calc_f_phi4(BC_flag, lowerBound, upperBound, m, b, p, k, x, f)
 
-    implicit none
-
     !! Data dictionary
     integer, intent(in) :: BC_flag
     integer, intent(in) :: lowerBound
@@ -545,5 +543,49 @@ contains
 
     end subroutine calc_f_phi4
 
+
+    subroutine calc_load(LC_loc, LC_val_loc, c, t, dt, L, p_loc, x_loc)
+
+    !! Data dictionary
+    real, parameter :: PI=3.141592653589793
+    integer, intent(in), dimension(3) :: LC_loc
+    real, intent(in), dimension(7) :: LC_val_loc
+    real, intent(in) :: c, t, dt
+    real, intent(in), dimension(4) :: L
+    real, intent(out) :: p_loc
+    real, intent(out), dimension(2) :: x_loc
+
+    if ( LC_loc(3) == 1 ) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            p_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))
+        end if
+    else if ( LC_loc(3) == 2 ) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            p_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))*&
+                & SIN(PI*((t+c*dt)-LC_val_loc(6))/(LC_val_loc(7)-LC_val_loc(6)))**2
+        end if
+    else if ( LC_loc(3) == 11 ) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            x_loc(1) = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))
+            x_loc(2) = 2*PI*LC_val_loc(4)*LC_val_loc(3)*COS(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))
+        end if
+    else if (LC_loc(3) == 12) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            x_loc(1) = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))*&
+                & SIN(PI*((t+c*dt)-LC_val_loc(1))/(LC_val_loc(2)-LC_val_loc(1)))**2
+            x_loc(2) = 2*LC_val_loc(3)*PI*SIN(PI*((t+c*dt)-LC_val_loc(1))/(LC_val_loc(2)-LC_val_loc(1)))*&
+                & ( LC_val_loc(4)*COS(2*PI*LC_val_loc(4)*(t+c*dt)+LC_val_loc(5))*&
+                & SIN(PI*((t+c*dt)-LC_val_loc(1))/(LC_val_loc(2)-LC_val_loc(1)))+&
+                & COS(PI*((t+c*dt)-LC_val_loc(1))/(LC_val_loc(2)-LC_val_loc(1)))*&
+                & SIN(2*PI*LC_val_loc(4)*(t+c*dt)+LC_val_loc(5))/(LC_val_loc(2)-LC_val_loc(1)) )
+        end if
+    else if (LC_loc(3) == 13) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            x_loc(1) = L(4) - LC_val_loc(3)*COS(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))
+            x_loc(2) = 2*PI*LC_val_loc(4)*LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*(t+c*dt) + LC_val_loc(5))
+        end if
+    end if
+
+    end subroutine calc_load
 
 end module sub_rk

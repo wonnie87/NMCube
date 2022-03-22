@@ -4,10 +4,13 @@ module sub_nb
 !!
 !! Author: Written by Myungwon Hwang (hwang125@purdue.edu)
 
-contains
-    subroutine calc_fs(BC_flag, lowerBound, upperBound, u, k, L, fs)
+implicit none
+private
+public :: calc_fs_metabeam, calc_kThat_metabeam, calc_fs_pendula, calc_kThat_pendula
+public :: calc_fs_phi4, calc_kThat_phi4, NR_iterations, calc_load
 
-    implicit none
+contains
+    subroutine calc_fs_metabeam(BC_flag, lowerBound, upperBound, u, k, L, fs)
 
     ! Data dictionary:
     integer, intent(in) :: BC_flag ! Boundary condition
@@ -427,15 +430,14 @@ contains
 
     END IF
 
-    end subroutine calc_fs
+    end subroutine calc_fs_metabeam
 
 
 
     !=============================================================================
     !=============================================================================
-    subroutine calc_kThat(BC_flag, lowerBound, upperBound, u, k, L, a, kThat)
+    subroutine calc_kThat_metabeam(BC_flag, lowerBound, upperBound, u, k, L, a, kThat)
 
-    implicit none
     ! Data dictionary:
     integer, intent(in) :: BC_flag ! Boundary condition
     integer, intent(in) :: lowerBound !
@@ -3083,14 +3085,12 @@ contains
     kThat(83) = kThat(83) + a(5)
     kThat(102) = kThat(102) + a(6)
 
-    end subroutine calc_kThat
+    end subroutine calc_kThat_metabeam
 
 
     !=============================================================================
     !=============================================================================
     subroutine calc_fs_pendula(BC_flag, lowerBound, upperBound, u, G, m, k, L, fs)
-
-    implicit none
 
     !! Data dictionary
     integer, intent(in) :: BC_flag
@@ -3120,8 +3120,6 @@ contains
     !=============================================================================
     !=============================================================================
     subroutine calc_kThat_pendula(BC_flag, lowerBound, UpperBound, u, G, m, k, L, a, kThat)
-
-    implicit none
 
     !! Data dictionary
     integer, intent(in) :: BC_flag
@@ -3162,8 +3160,6 @@ contains
     !=============================================================================
     subroutine calc_fs_phi4(BC_flag, lowerBound, upperBound, u, k, fs)
 
-    implicit none
-
     ! Data dictionary:
     integer, intent(in) :: BC_flag ! Boundary condition
     integer, intent(in) :: lowerBound !
@@ -3187,8 +3183,6 @@ contains
     !=============================================================================
     !=============================================================================
     subroutine calc_kThat_phi4(BC_flag, lowerBound, upperBound, u, k, a, kThat)
-
-    implicit none
 
     ! Data dictionary:
     integer, intent(in) :: BC_flag ! Boundary condition
@@ -3225,7 +3219,6 @@ contains
     subroutine calc_du(N_inv, tol_inv, N_loc, procID, noProc, DoF, kThat, res, du, t_sim, cnt_inv, t_inv_total)
 
     use mpi
-    implicit none
 
     ! Data dictionary:
     integer, intent(in) :: N_inv ! max number of itertations for matrix inversion
@@ -3353,7 +3346,6 @@ contains
     & a1_loc, phat_loc, u_loc, N_inv, tol_inv, t_sim, cnt_NR, cnt_inv, t_NR_total, t_inv_total, G, m_loc)
 
     use mpi
-    implicit none
 
     ! Data dictionary:
     integer, intent(in) :: N_NR ! max number of itertations for matrix inversion
@@ -3400,7 +3392,7 @@ contains
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(1), 0, 1, u_loc(it2+1), k, fs)
                 else if (prob_flag == 4) then
-                    call calc_fs(BC(1), 0, 11, u_loc(6*it2+1), k, L, fs)
+                    call calc_fs_metabeam(BC(1), 0, 11, u_loc(6*it2+1), k, L, fs)
                 end if
             else if (it2 == N_loc .and. procID == noProc-1) then
                 if (prob_flag == 1) then
@@ -3408,7 +3400,7 @@ contains
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(2), -1, 0, u_loc(it2), k, fs)
                 else if (prob_flag == 4) then
-                    call calc_fs(BC(2), -6, 5, u_loc(6*it2-5), k, L, fs)
+                    call calc_fs_metabeam(BC(2), -6, 5, u_loc(6*it2-5), k, L, fs)
                 end if
             else
                 if (prob_flag == 1) then
@@ -3416,7 +3408,7 @@ contains
                 else if (prob_flag == 2) then
                     call calc_fs_phi4(BC(0), -1, 1, u_loc(it2), k, fs)
                 else if (prob_flag == 4) then
-                    call calc_fs(BC(0), -6, 11, u_loc(6*it2-5), k, L, fs)
+                    call calc_fs_metabeam(BC(0), -6, 11, u_loc(6*it2-5), k, L, fs)
                 end if
             end if
 
@@ -3457,7 +3449,7 @@ contains
                     call calc_kThat_phi4(BC(1), 0, 1, u_loc(DoF*it2+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 4) then
-                    call calc_kThat(BC(1), 0, 11, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    call calc_kThat_metabeam(BC(1), 0, 11, u_loc(DoF*it2+1), k, L, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 end if
             else if (it2 == N_loc .and. procID == noProc-1) then
@@ -3468,7 +3460,7 @@ contains
                     call calc_kThat_phi4(BC(2), -1, 0, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 4) then
-                    call calc_kThat(BC(2), -6, 5, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    call calc_kThat_metabeam(BC(2), -6, 5, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 end if
             else
@@ -3479,7 +3471,7 @@ contains
                     call calc_kThat_phi4(BC(0), -1, 1, u_loc(DoF*(it2-1)+1), k, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 else if (prob_flag == 4) then
-                    call calc_kThat(BC(0), -6, 11, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
+                    call calc_kThat_metabeam(BC(0), -6, 11, u_loc(DoF*(it2-1)+1), k, L, a1_loc(DoF*(it2-1)+1), &
                     & kThat_loc(3*DoF*DoF*(it2-1)+1))
                 end if
             end if
@@ -3523,5 +3515,42 @@ contains
 
     end subroutine NR_iterations
 
+
+    subroutine calc_load(LC_loc, LC_val_loc, t, L, p_loc, u_loc)
+
+    !! Data dictionary
+    real, parameter :: PI=3.141592653589793
+    integer, intent(in), dimension(3) :: LC_loc
+    real, intent(in), dimension(7) :: LC_val_loc
+    real, intent(in) :: t
+    real, intent(in), dimension(4) :: L
+    real, intent(out) :: p_loc
+    real, intent(out) :: u_loc
+
+    if ( LC_loc(3) == 1 ) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            p_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*t + LC_val_loc(5))
+        end if
+    else if ( LC_loc(3) == 2 ) then
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            p_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*t + LC_val_loc(5))*&
+                & SIN(PI*(t-LC_val_loc(6))/(LC_val_loc(7)-LC_val_loc(6)))**2
+        end if
+    else if ( LC_loc(3) == 11 ) then !!! To be implemented
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            u_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*t + LC_val_loc(5))
+        end if
+    else if (LC_loc(3) == 12) then !!! To be implemented
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            u_loc = LC_val_loc(3)*SIN(2*PI*LC_val_loc(4)*t + LC_val_loc(5))*&
+                & SIN(PI*(t-LC_val_loc(1))/(LC_val_loc(2)-LC_val_loc(1)))**2
+        end if
+    else if (LC_loc(3) == 13) then !!! To be implemented
+        if ( t >= LC_val_loc(1) .and. t <= LC_val_loc(2) ) then
+            u_loc = L(4) - LC_val_loc(3)*COS(2*PI*LC_val_loc(4)*t + LC_val_loc(5))
+        end if
+    end if
+
+    end subroutine calc_load
 
 end module sub_nb
