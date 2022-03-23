@@ -55,22 +55,13 @@ prob = ig.ProbType(1) # 1: 1D pendula chain, 2: 1D phi4 chain, 3: N/A, 4: bistab
     ## Third digit (condition): 0-free, 1-fixed
 BC = np.array([100, 110, 120])
 
-G = 1. # [for prob 1 only] gravitational constant
-
-### k (stiffness) array ###
-    ## prob 1: [k_th (stiffness of torsional spring)] 
+### s (parameter) array ###
+    ## prob 1: [k_th, m, g, l] 
     ## prob 2: [k, C1, C2, C3, C4] - refer to the manuscript
-    ## prob 4: [k1, k2, k3, k4, k5, k6, k7, k8] - refer to the manuscript
-k = np.array([1.]) # for prob 1
-#k = np.array([1.0, 0.0, -0.030, 0.0, 0.015]) # for prob 2
-#k = np.array([1.241, 0.6*1.793, 0.6, 100., 100., 100., 100., 100.]) # for prob 4
-
-### L (length) array ###
-    # prob 1: [pendulum lengh]
-    # prob 2: [] - empty
-    # prob 4: [L1, L2, L3, R] - Refer to the manuscript
-L = np.array([1.]) # for prob 1
-#L = np.array([20., 40., 20., 8.]) # for prob 4
+    ## prob 4: [k1, k2, k3, k4, k5, k6, k7, k8, L1, L2, L3, R] - refer to the manuscript
+s = np.array([1., 1., 1., 1.]) # for prob 1
+#s = np.array([1.0, 0.0, -0.030, 0.0, 0.015]) # for prob 2
+#s = np.array([1.241, 0.6*1.793, 0.6, 100., 100., 100., 100., 100., 20., 40., 20., 8.]) # for prob 4
 
 ### LC (Load condition) array: [[UC, local DoF, Loadcase], ... ] ###
     ## Loadcases: 1-sine force, 2-modulated sine force,
@@ -87,10 +78,10 @@ t2 = 0.0
 LC_val = np.array([[tStart, tEnd, amp, freqIn, phi0, t1, t2]])
 
 ### mass array ###
-    ## prob 1: [I, m]
+    ## prob 1: [I]
     ## prob 2: [m]
     ## prob 4: [m1, m1, m2, m2, m3, m3]
-m = np.array([1., 1.]) # for prob 1
+m = np.array([1.]) # for prob 1
 #m = np.array([2.]) # for prob 2
 #m = np.array([2.e-6, 2.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6]) # for prob 4
     ## If non-periodic, properties can be assigned for each element. For example:
@@ -98,7 +89,7 @@ m = np.array([1., 1.]) # for prob 1
         #m[0,:] = np.array([4.e-6, 4.e-6, 2.e-6, 2.e-6, 2.e-6, 2.e-6])
 
 ### on-site damping array ###
-b = 0.0*m
+b = 0.0*m 
 #b = 9.9077*m # for prob 4
 
 ### Initial conditions ###
@@ -113,15 +104,8 @@ udot0[0,0] = 2.0
 
 try: 
     ig.MethodGen(dt, tStart, tEnd, dtWrite, sol_flag, sol_params)
-    print("")
 except NameError:
     ig.MethodGen(dt, tStart, tEnd, dtWrite, sol_flag)
     print(f" >> Parameters for {sol_flag.upper()} method are not provided. Default parameters will be used.")
 
-if prob.flag == 1:
-    ig.DesignGen(sol_flag,des,N_global,prob,BC,k,m,b,LC,LC_val,u0,udot0,L,G)
-elif prob.flag == 2:
-    ig.DesignGen(sol_flag,des,N_global,prob,BC,k,m,b,LC,LC_val,u0,udot0)
-else:
-    ig.DesignGen(sol_flag,des,N_global,prob,BC,k,m,b,LC,LC_val,u0,udot0,L)
-
+ig.DesignGen(sol_flag,des,N_global,prob,BC,s,m,b,LC,LC_val,u0,udot0)

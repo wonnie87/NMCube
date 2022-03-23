@@ -9,6 +9,7 @@ program main_rk
 !! ==========  ================  =================================================
 !! 10/29/2020   Myungwon Hwang   Rev00: Initial working program
 !! 11/30/2021   Myungwon Hwang   Rev01: Echoing simulation status; Bug fixes.
+!! 03/23/2022   Myungwon Hwang   Rev02: Refactored the code
 !!
 
 use hdf5_helpers
@@ -19,7 +20,7 @@ implicit none
 !include 'mpif.h' ! if 'use mpi' does not work
 
 !! Data dictionary: Pointers
-!procedure (calc_f_metabeam), pointer :: p_calc_f => NULL()
+procedure (calc_f_metabeam), pointer :: p_calc_f => NULL()
 !! Data dictionary: Constants
 !! Data dictionary: MPI-related
 integer :: mpi_ierr, noProc, procID, status(MPI_STATUS_SIZE), mpi_errcode
@@ -29,9 +30,9 @@ real :: tWallclockStart, tWallclockEnd ! wall clock time of the star and the end
 !! Data dictionary: HDF5-related
 character(80) :: filename, filename_h5
 integer(HID_T) :: file_id, dspace_m_id, dspace_t_id, dspace_u_id, dspace_f_id, mspace_t_id, mspace_u_id, mspace_f_id
-integer(HID_T) :: aspace_PT_id, aspace_N_id, aspace_G_id, aspace_L_id, aspace_k_id, aspace_f_UC_id, attr_id
+integer(HID_T) :: aspace_PT_id, aspace_N_id, aspace_s_id, aspace_f_UC_id, attr_id
 integer(HID_T) :: dset_m_id, dset_t_id, dset_u_id, dset_udot_id, dset_f_id, dset_uddot_id 
-integer(HSIZE_T), dimension(1:1) :: dimsa_PT, dimsa_N, dimsa_G, dimsa_L, dimsa_k, dimsa_f_UC
+integer(HSIZE_T), dimension(1:1) :: dimsa_PT, dimsa_N, dimsa_s, dimsa_f_UC
 integer(HSIZE_T), dimension(1:1) :: dims_m, dims_t, dimsm_t
 integer(HSIZE_T), dimension(1:1) :: hslab_t_offset, hslab_t_count, hslab_t_stride, hslab_t_block
 integer(HSIZE_T), dimension(1:2) :: dims_u, dimsm_u, dims_f, dimsm_f
@@ -51,9 +52,7 @@ real :: tStart, tEnd ! simulation start and end times
 real :: c2, c3, c4, a21, a31, a32, a41, a42, a43, b1, b2, b3, b4 ! RK coefficents
 integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 4: metabeam
 integer, dimension(0:2) :: BC ! boundary condition
-real, dimension(9) :: k = 0.0 ! spring stiffness array
-real, dimension(4) :: L ! length array containing unit cell geometry information
-real :: G ! gravitational acceleration
+real, dimension(12) :: s = 0.0 ! parameter array
 real :: u_0 ! Initial displacement of each bistable element
 real :: uDot_0 ! Initial velocity of each bistable element
 integer, allocatable, dimension(:) :: LC
@@ -64,8 +63,6 @@ integer :: LC_loc_dim2
 integer, allocatable, dimension(:,:) :: LC_loc
 real, allocatable, dimension(:,:) :: LC_val_loc
 integer :: LC_flag ! load case (1: single-point horizontal, 2: distributed vertical)
-integer :: DoF ! unit cell degrees of freedom
-integer :: noState ! number of states per unit cell
 real, allocatable, dimension(:) :: m_global ! global mass array
 real, allocatable, dimension(:) :: b_global ! global damping array
 real, allocatable, dimension(:) :: x ! global array of state space (including initial condition)
@@ -85,7 +82,6 @@ real(kind=DBL) :: t ! current simulation time
 real, allocatable, dimension(:) :: k1, k2, k3, k4 ! RK method
 real, allocatable, dimension(:) :: xTmp ! ...
 real, allocatable, dimension(:) :: f_val, f_val_loc ! store force value at each iteration
-real :: ran ! random number
 
 
 call MPI_INIT(mpi_ierr)
@@ -143,109 +139,45 @@ if (procID == 0) then
             end if
             read (2,'(/I10)') prob_flag
             read (2,*); read (2,*) BC(0:2)
+            
             if (prob_flag == 1) then
-                read (2,*); read (2,*) G
-                read (2,*); read (2,*) k(1)
-                read (2,*); read (2,*) L(1)
-                read (2,*); read (2,*) LC_dim2
-
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-                noState = 2*DoF
-
-                allocate(m_global(2*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(2*it-1:2*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it)
-                end do
-
+                s_dim = 4
             else if (prob_flag == 2) then
-                read (2,*); read (2,*) k(1:5)
-                read (2,*); read (2,*) LC_dim2
-                
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-                noState = 2*DoF
-
-                allocate(m_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(DoF*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it)
-                end do
-
+                s_dim = 5
             else if (prob_flag == 4) then
-                if (BC(0) == 300) then
-                    read (2,*); read (2,*) k(1:9)
-                else
-                    read (2,*); read (2,*) k(1:8)
-                end if
-                read (2,*); read (2,*) L(1:4)
-                read (2,*); read (2,*) LC_dim2
-
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-                noState = 2*DoF
-
-                allocate(m_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(DoF*it-5:DoF*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it-5:DoF*it)
-                end do
+                s_dim = 12
             end if
+
+            read (2,*); read (2,*) s(1:s_dim)
+            read (2,*); read (2,*) LC_dim2
+
+            allocate(f_val(LC_dim2), STAT=f_stat)
+            allocate(LC(3*LC_dim2), STAT=f_stat)
+            read (2,*)
+            do it = 1, LC_dim2
+                read (2,*) LC(3*it-2:3*it)
+            end do
+
+            allocate(LC_val(7*LC_dim2), STAT=f_stat)
+            read (2,*)
+            do it = 1, LC_dim2
+                read (2,*) LC_val(7*it-6:7*it)
+            end do
+
+            read (2,'(/I10)') DoF
+            noState = 2*DoF
+
+            allocate(m_global(DoF*N_global), STAT=f_stat)
+            read (2,*)
+            do it = 1, N_global
+                read (2,*) m_global(DoF*(it-1)+1:DoF*it)
+            end do
+
+            allocate(b_global(DoF*N_global), STAT=f_stat)
+            read (2,*)
+            do it = 1, N_global
+                read (2,*) b_global(DoF*(it-1)+1:DoF*it)
+            end do
 
             allocate(x(noState*N_global), STAT=f_stat)
             read (2,*)
@@ -307,46 +239,24 @@ call MPI_BCAST(dtWrite, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(N_global, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(prob_flag, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(BC(0), 3, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(s_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(s(1), s_dim, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+if (procID /= 0) then
+    allocate(LC(3*LC_dim2), STAT=f_stat)
+    allocate(LC_val(7*LC_dim2), STAT=f_stat)
+end if
+call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(noState, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+
 if (prob_flag == 1) then
-    call MPI_BCAST(G, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(k(1), 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(L(1), 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(noState, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_f => calc_f_pendula
 else if (prob_flag == 2) then
-    call MPI_BCAST(k(1), 5, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(noState, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_f => calc_f_phi4
 else if (prob_flag == 4) then
-    if (BC(0) == 300) then
-        call MPI_BCAST(k(1), 9, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    else
-        call MPI_BCAST(k(1), 8, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    end if
-    call MPI_BCAST(L(1), 4, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(noState, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_f => calc_f_metabeam
 end if
 
 N_fl = N_global/noProc
@@ -414,11 +324,7 @@ else
 end if
 
 allocate(x_loc(noState*(N_loc+2)), STAT=f_stat)
-if (prob_flag == 1) then
-    allocate(m_loc(2*N_loc), STAT=f_stat) 
-else if (prob_flag == 2 .or. prob_flag == 4) then
-    allocate(m_loc(DoF*N_loc), STAT=f_stat) 
-end if
+allocate(m_loc(DoF*N_loc), STAT=f_stat) 
 allocate(b_loc(DoF*N_loc), STAT=f_stat) 
 allocate(p_loc(DoF*N_loc), STAT=f_stat) 
 allocate(xTmp(noState*(N_loc+2)), STAT=f_stat)
@@ -440,13 +346,8 @@ tWallclockStart = MPI_WTIME()
 !! Distribute global data to each process
 call MPI_SCATTERV(x, scatter_sc, scatter_disp, MPI_DOUBLE_PRECISION, x_loc(noState+1), noState*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-if (prob_flag == 1) then
-    call MPI_SCATTERV(m_global, scatter_sc, scatter_disp, MPI_DOUBLE_PRECISION, m_loc, 2*N_loc, &
-    & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-else if (prob_flag == 2 .or. prob_flag == 4) then
-    call MPI_SCATTERV(m_global, scatter_sc2, scatter_disp2, MPI_DOUBLE_PRECISION, m_loc, DoF*N_loc, &
-    & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-end if
+call MPI_SCATTERV(m_global, scatter_sc2, scatter_disp2, MPI_DOUBLE_PRECISION, m_loc, DoF*N_loc, &
+& MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_SCATTERV(b_global, scatter_sc2, scatter_disp2, MPI_DOUBLE_PRECISION, b_loc, DoF*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 
@@ -476,26 +377,11 @@ if (procID == 0) then
 
     dimsa_PT = (/ 1 /)
     dimsa_N = (/ 1 /)
-    if (prob_flag == 1) then
-        dimsa_G = (/ 1 /)
-        dimsa_L = (/ 1 /)
-        dimsa_k = (/ 1 /)
-    else if (prob_flag == 2) then
-        dimsa_k = (/ 5 /)
-    else if (prob_flag == 4) then
-        dimsa_L = (/ 4 /)
-        dimsa_k = (/ 9 /)
-    end if
+    dimsa_s = (/ s_dim /)
     dimsa_f_UC = (/ LC_dim2 /)
     call h5screate_simple_f(1, dimsa_PT, aspace_PT_id, hdf5_ierr)
     call h5screate_simple_f(1, dimsa_N, aspace_N_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5screate_simple_f(1, dimsa_G, aspace_G_id, hdf5_ierr)
-        call h5screate_simple_f(1, dimsa_L, aspace_L_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5screate_simple_f(1, dimsa_L, aspace_L_id, hdf5_ierr)
-    end if
-    call h5screate_simple_f(1, dimsa_k, aspace_k_id, hdf5_ierr)
+    call h5screate_simple_f(1, dimsa_s, aspace_s_id, hdf5_ierr)
     call h5screate_simple_f(1, dimsa_f_UC, aspace_f_UC_id, hdf5_ierr)
     call h5acreate_f(file_id, "ProblemType", H5T_NATIVE_INTEGER, aspace_PT_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, prob_flag, dimsa_PT, hdf5_ierr)
@@ -503,20 +389,8 @@ if (procID == 0) then
     call h5acreate_f(file_id, "N", H5T_NATIVE_INTEGER, aspace_N_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, N_global, dimsa_N, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5acreate_f(file_id, "G", H5T_NATIVE_REAL, aspace_G_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, G, dimsa_G, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-        call h5acreate_f(file_id, "L", H5T_NATIVE_REAL, aspace_L_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, L, dimsa_L, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5acreate_f(file_id, "L", H5T_NATIVE_REAL, aspace_L_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, L, dimsa_L, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-    end if
-    call h5acreate_f(file_id, "k", H5T_NATIVE_REAL, aspace_k_id, attr_id, hdf5_ierr)
-    call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, k, dimsa_k, hdf5_ierr)
+    call h5acreate_f(file_id, "Parameters", H5T_NATIVE_REAL, aspace_s_id, attr_id, hdf5_ierr)
+    call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, s, dimsa_s, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
     call h5acreate_f(file_id, "f_UC", H5T_NATIVE_INTEGER, aspace_f_UC_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, LC(1:3*LC_dim2:3), dimsa_f_UC, hdf5_ierr)
@@ -525,20 +399,10 @@ if (procID == 0) then
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, LC(2:3*LC_dim2:3), dimsa_f_UC, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
     call h5sclose_f(aspace_N_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5sclose_f(aspace_G_id, hdf5_ierr)
-        call h5sclose_f(aspace_L_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5sclose_f(aspace_L_id, hdf5_ierr)
-    end if
-    call h5sclose_f(aspace_k_id, hdf5_ierr)
+    call h5sclose_f(aspace_s_id, hdf5_ierr)
     call h5sclose_f(aspace_f_UC_id, hdf5_ierr)
 
-    if (prob_flag == 1) then
-        dims_m = (/ 2*N_global /)
-    else if (prob_flag == 2 .or. prob_flag ==4) then
-        dims_m = (/ DoF*N_global /)
-    end if
+    dims_m = (/ DoF*N_global /)
     call h5screate_simple_f(1, dims_m, dspace_m_id, hdf5_ierr)
     call h5dcreate_f(file_id, "/m", H5T_NATIVE_REAL, dspace_m_id, dset_m_id, hdf5_ierr)
     call h5dwrite_f(dset_m_id, H5T_NATIVE_DOUBLE, m_global, dims_m, hdf5_ierr)
@@ -596,76 +460,32 @@ do
     !! Calculate k1
     p_loc = 0.
     do it = 1, LC_loc_dim2
-        call calc_load(LC_loc(1,it), LC_val_loc(1,it), 0., t, dt, L, &
+        call calc_load(LC_loc(1,it), LC_val_loc(1,it), 0., t, dt, &
             & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-            & x_loc( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
+            & x_loc( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) ) ! modify s.t. it can handle LC=13
         f_val_loc(it) = p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) )
     end do
             
     do it2 = 1, N_loc
         if (it2 == 1 .and. procID == 0) then
-            if (prob_flag == 1) then
-                call calc_f_pendula(BC(1), 0, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                & G, k, L, x_loc(2*it2+1), k1(2*it2+1))
-            else if (prob_flag == 2) then
-                call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                & k, x_loc(2*it2+1), k1(2*it2+1))
-            else if (prob_flag == 4) then
-                call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                & k, L, x_loc(12*it2+1), k1(noState*it2+1)) 
-                if ( LC_loc_dim2 > 0) then
-                    do it3 = 1, LC_loc_dim2
-                        if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                k1(noState*it2+2*LC_loc(2,it3)) = 0.
-                            end if
-                        end if
-                    end do
-                end if
-            end if
+            call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                & p_loc(DoF*(it2-1)+1), s, x_loc(noState*it2+1), k1(noState*it2+1))
         else if (it2 == N_loc .and. procID == noProc-1) then
-            if (prob_flag == 1) then
-                call calc_f_pendula(BC(2), -2, 1, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                & G, k, L, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 2) then
-                call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
-                & k, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 4) then
-                call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                & k, L, x_loc(12*it2-11), k1(noState*it2+1))
-                if ( LC_loc_dim2 > 0) then
-                    do it3 = 1, LC_loc_dim2
-                        if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                k1(noState*it2+2*LC_loc(2,it3)) = 0.
-                            end if
-                        end if
-                    end do
-                end if
-            end if
+            call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                & p_loc(DoF*(it2-1)+1), s, x_loc(noState*(it2-1)+1), k1(noState*it2+1))
         else
-            if (prob_flag == 1) then
-                call calc_f_pendula(BC(0), -2, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                & G, k, L, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 2) then
-                call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                & k, x_loc(2*it2-1), k1(2*it2+1))
-            else if (prob_flag == 4) then
-                call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                & k, L, x_loc(12*it2-11), k1(noState*it2+1))
-                if ( LC_loc_dim2 > 0) then
-                    do it3 = 1, LC_loc_dim2
-                        if ( it2 == LC_loc(1,it3) ) then
-                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                k1(noState*it2+2*LC_loc(2,it3)) = 0.
-                            end if
-                        end if
-                    end do
+            call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                & p_loc(DoF*(it2-1)+1), s, x_loc(noState*(it2-1)+1), k1(noState*it2+1))
+        end if
+        if ( LC_loc_dim2 > 0 ) then
+            do it3 = 1, LC_loc_dim2
+                if ( it2 == LC_loc(1,it3) ) then
+                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
+                        k1(noState*it2+2*LC_loc(2,it3)-1) = 0.
+                        k1(noState*it2+2*LC_loc(2,it3)) = 0.
+                    end if
                 end if
-            end if
+            end do
         end if
     end do
 
@@ -708,77 +528,32 @@ do
         !! Calculate k2
         xTmp = x_loc + dt*a21*k1
 
-        p_loc = 0.
         do it = 1, LC_loc_dim2
-            call calc_load(LC_loc(1,it), LC_val_loc(1,it), c2, t, dt, L, &
+            call calc_load(LC_loc(1,it), LC_val_loc(1,it), c2, t, dt, &
                 & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
                 & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
         end do
             
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
-                if (prob_flag == 1) then
-                    call calc_f_pendula(BC(1), 0, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                    & G, k, L, xTmp(2*it2+1), k2(2*it2+1))
-                else if (prob_flag == 2) then
-                    call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                    & k, xTmp(2*it2+1), k2(2*it2+1))
-                else if (prob_flag == 4) then
-                    call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                    & k, L, xTmp(12*it2+1), k2(noState*it2+1)) 
-                    if ( LC_loc_dim2 > 0) then
-                        do it3 = 1, LC_loc_dim2
-                            if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                    k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                    k2(noState*it2+2*LC_loc(2,it3)) = 0.
-                                end if
-                            end if
-                        end do
-                    end if
-                end if
+                call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k2(noState*it2+1))
             else if (it2 == N_loc .and. procID == noProc-1) then
-                if (prob_flag == 1) then
-                    call calc_f_pendula(BC(2), -2, 1, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                    & G, k, L, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 2) then
-                    call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
-                    & k, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 4) then
-                    call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                    & k, L, xTmp(12*it2-11), k2(noState*it2+1))
-                    if ( LC_loc_dim2 > 0) then
-                        do it3 = 1, LC_loc_dim2
-                            if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                    k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                    k2(noState*it2+2*LC_loc(2,it3)) = 0.
-                                end if
-                            end if
-                        end do
-                    end if
-                end if
+                call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k2(noState*it2+1))
             else
-                if (prob_flag == 1) then
-                    call calc_f_pendula(BC(0), -2, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                    & G, k, L, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 2) then
-                    call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                    & k, xTmp(2*it2-1), k2(2*it2+1))
-                else if (prob_flag == 4) then
-                    call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                    & k, L, xTmp(12*it2-11), k2(noState*it2+1))
-                    if ( LC_loc_dim2 > 0) then
-                        do it3 = 1, LC_loc_dim2
-                            if ( it2 == LC_loc(1,it3) ) then
-                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                    k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                    k2(noState*it2+2*LC_loc(2,it3)) = 0.
-                                end if
-                            end if
-                        end do
+                call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k2(noState*it2+1))
+            end if
+            if ( LC_loc_dim2 > 0 ) then
+                do it3 = 1, LC_loc_dim2
+                    if ( it2 == LC_loc(1,it3) ) then
+                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
+                            k2(noState*it2+2*LC_loc(2,it3)-1) = 0.
+                            k2(noState*it2+2*LC_loc(2,it3)) = 0.
+                        end if
                     end if
-                end if
+                end do
             end if
         end do
 
@@ -808,77 +583,32 @@ do
             !! Calculate k3
             xTmp = x_loc + dt*(a31*k1 + a32*k2)
 
-            p_loc = 0.
             do it = 1, LC_loc_dim2
-                call calc_load(LC_loc(1,it), LC_val_loc(1,it), c3, t, dt, L, &
+                call calc_load(LC_loc(1,it), LC_val_loc(1,it), c3, t, dt, &
                     & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
                     & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
             end do
             
             do it2 = 1, N_loc
                 if (it2 == 1 .and. procID == 0) then
-                    if (prob_flag == 1) then
-                        call calc_f_pendula(BC(1), 0, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                        & G, k, L, xTmp(2*it2+1), k3(2*it2+1))
-                    else if (prob_flag == 2) then
-                        call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                        & k, xTmp(2*it2+1), k3(2*it2+1))
-                    else if (prob_flag == 4) then
-                        call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                        & k, L, xTmp(12*it2+1), k3(noState*it2+1)) 
-                        if ( LC_loc_dim2 > 0) then
-                            do it3 = 1, LC_loc_dim2
-                                if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                        k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                        k3(noState*it2+2*LC_loc(2,it3)) = 0.
-                                    end if
-                                end if
-                            end do
-                        end if
-                    end if
+                    call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k3(noState*it2+1))
                 else if (it2 == N_loc .and. procID == noProc-1) then
-                    if (prob_flag == 1) then
-                        call calc_f_pendula(BC(2), -2, 1, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                        & G, k, L, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 2) then
-                        call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
-                        & k, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 4) then
-                        call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                        & k, L, xTmp(12*it2-11), k3(noState*it2+1))
-                        if ( LC_loc_dim2 > 0) then
-                            do it3 = 1, LC_loc_dim2
-                                if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                        k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                        k3(noState*it2+2*LC_loc(2,it3)) = 0.
-                                    end if
-                                end if
-                            end do
-                        end if
-                    end if
+                    call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k3(noState*it2+1))
                 else
-                    if (prob_flag == 1) then
-                        call calc_f_pendula(BC(0), -2, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                        & G, k, L, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 2) then
-                        call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                        & k, xTmp(2*it2-1), k3(2*it2+1))
-                    else if (prob_flag == 4) then
-                        call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                        & k, L, xTmp(12*it2-11), k3(noState*it2+1))
-                        if ( LC_loc_dim2 > 0) then
-                            do it3 = 1, LC_loc_dim2
-                                if ( it2 == LC_loc(1,it3) ) then
-                                    if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                        k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                        k3(noState*it2+2*LC_loc(2,it3)) = 0.
-                                    end if
-                                end if
-                            end do
+                    call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k3(noState*it2+1))
+                end if
+                if ( LC_loc_dim2 > 0 ) then
+                    do it3 = 1, LC_loc_dim2
+                        if ( it2 == LC_loc(1,it3) ) then
+                            if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
+                                k3(noState*it2+2*LC_loc(2,it3)-1) = 0.
+                                k3(noState*it2+2*LC_loc(2,it3)) = 0.
+                            end if
                         end if
-                    end if
+                    end do
                 end if
             end do
 
@@ -908,77 +638,32 @@ do
                 !! Calculate k4
                 xTmp = x_loc + dt*(a41*k1 + a42*k2 + a43*k3)
 
-                p_loc = 0.
                 do it = 1, LC_loc_dim2
-                    call calc_load(LC_loc(1,it), LC_val_loc(1,it), c4, t, dt, L, &
+                    call calc_load(LC_loc(1,it), LC_val_loc(1,it), c4, t, dt, &
                         & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
                         & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
                 end do
             
                 do it2 = 1, N_loc
                     if (it2 == 1 .and. procID == 0) then
-                        if (prob_flag == 1) then
-                            call calc_f_pendula(BC(1), 0, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                            & G, k, L, xTmp(2*it2+1), k4(2*it2+1))
-                        else if (prob_flag == 2) then
-                            call calc_f_phi4(BC(1), 0, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                            & k, xTmp(2*it2+1), k4(2*it2+1))
-                        else if (prob_flag == 4) then
-                            call calc_f_metabeam(BC(1), 0, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                            & k, L, xTmp(12*it2+1), k4(noState*it2+1)) 
-                            if ( LC_loc_dim2 > 0) then
-                                do it3 = 1, LC_loc_dim2
-                                    if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                            k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                            k4(noState*it2+2*LC_loc(2,it3)) = 0.
-                                        end if
-                                    end if
-                                end do
-                            end if
-                        end if
+                        call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                            & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k4(noState*it2+1))
                     else if (it2 == N_loc .and. procID == noProc-1) then
-                        if (prob_flag == 1) then
-                            call calc_f_pendula(BC(2), -2, 1, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                            & G, k, L, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 2) then
-                            call calc_f_phi4(BC(2), -2, 1, m_loc(it2), b_loc(it2), p_loc(it2), &
-                            & k, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 4) then
-                            call calc_f_metabeam(BC(2), -12, 11, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                            & k, L, xTmp(12*it2-11), k4(noState*it2+1))
-                            if ( LC_loc_dim2 > 0) then
-                                do it3 = 1, LC_loc_dim2
-                                    if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                            k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                            k4(noState*it2+2*LC_loc(2,it3)) = 0.
-                                        end if
-                                    end if
-                                end do
-                            end if
-                        end if
+                        call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                            & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k4(noState*it2+1))
                     else
-                        if (prob_flag == 1) then
-                            call calc_f_pendula(BC(0), -2, 3, m_loc(2*it2-1), b_loc(it2), p_loc(it2), &
-                            & G, k, L, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 2) then
-                            call calc_f_phi4(BC(0), -2, 3, m_loc(it2), b_loc(it2), p_loc(it2), &
-                            & k, xTmp(2*it2-1), k4(2*it2+1))
-                        else if (prob_flag == 4) then
-                            call calc_f_metabeam(BC(0), -12, 23, m_loc(6*it2-5), b_loc(6*it2-5), p_loc(6*it2-5), &
-                            & k, L, xTmp(12*it2-11), k4(noState*it2+1))
-                            if ( LC_loc_dim2 > 0) then
-                                do it3 = 1, LC_loc_dim2
-                                    if ( it2 == LC_loc(1,it3) ) then
-                                        if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
-                                            k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
-                                            k4(noState*it2+2*LC_loc(2,it3)) = 0.
-                                        end if
-                                    end if
-                                end do
+                        call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                            & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k4(noState*it2+1))
+                    end if
+                    if ( LC_loc_dim2 > 0 ) then
+                        do it3 = 1, LC_loc_dim2
+                            if ( it2 == LC_loc(1,it3) ) then
+                                if ( LC_loc(3,it3) == 11 .or. LC_loc(3,it3) == 12 .or. LC_loc(3,it3) == 13) then
+                                    k4(noState*it2+2*LC_loc(2,it3)-1) = 0.
+                                    k4(noState*it2+2*LC_loc(2,it3)) = 0.
+                                end if
                             end if
-                        end if
+                        end do
                     end if
                 end do
                 x_loc = x_loc + dt*(b1*k1 + b2*k2 + b3*k3 + b4*k4)

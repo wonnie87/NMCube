@@ -130,7 +130,8 @@ def MethodGen(dt, tStart, tEnd, dtWrite, sol_flag, params=''):
 
 
 #####################################################################
-def DesignGen(sol_flag,des,N_global,prob,BC,k,m,b,LC,LC_val,u0,udot0,L=[],G=[]):
+def DesignGen(sol_flag,des,N_global,prob,BC,s,m,b,LC,LC_val,u0,udot0):
+#def DesignGen(sol_flag,des,N_global,prob,BC,k,m,b,LC,LC_val,u0,udot0,L=[],G=[]):
     """..."""
     import sys
 
@@ -156,33 +157,17 @@ t{LC_val[0,6]-LC_val[0,5]}\n")
             file.write("{}, ".format(BC[n]))
 
     if prob.flag == 1:
-        file.write("**G\n")
-        file.write("{}\n".format(G))
-
-    if prob.flag == 1:
-        file.write("**k(1)\n")
+        file.write("**k_th, m, g, l\n")
     elif prob.flag == 2:
         file.write("**k(1), k(2), k(3), k(4), k(5)\n")
     elif prob.flag == 4:
-        file.write("**k(1), k(2), k(3), k(4), k(5), k(6), k(7), k(8)\n")
+        file.write("**k1, k2, k3, k4, k5, k6, k7, k8, L1, L2, L3, R\n")
 
-    for n in range(len(k)):
-        if n == len(k)-1:
-            file.write("{}\n".format(k[n]))
+    for n in range(len(s)):
+        if n == len(s)-1:
+            file.write("{}\n".format(s[n]))
         else:
-            file.write("{}, ".format(k[n]))
-
-    if prob.flag != 2:
-        if prob.flag == 1:
-            file.write("**L(1)\n")
-        elif prob.flag ==4:
-            file.write("**L(1), L(2), L(3), L(4)\n")
-
-        for n in range(len(L)):
-            if n == len(L)-1:
-                file.write("{}\n".format(L[n]))
-            else:
-                file.write("{}, ".format(L[n]))
+            file.write("{}, ".format(s[n]))
 
     LC_dim2, LC_dim1 = LC.shape
     file.write("**LC_dim2\n")
@@ -207,27 +192,34 @@ t{LC_val[0,6]-LC_val[0,5]}\n")
     file.write("{}\n".format(prob.DoF))
 
     if prob.flag == 1:
-        file.write("**m(1), m(2)\n")
+        file.write("**I\n")
     elif prob.flag == 2:
         file.write("**m(1)\n")
     elif prob.flag == 4:
-        file.write("**m(1), m(2), m(3), m(4), m(5), m(6)\n")
+        file.write("**m1, m1, m2, m2, m3, m3\n")
  
-    if prob.flag == 1:
-        if m.shape == (N_global, 2*prob.DoF):
-            m_global = m.copy()
-        elif m.shape == (2*prob.DoF,):
-            m_global = m * np.ones((N_global,2*prob.DoF))
-        else:
-            sys.exit(f" >> Shape of mass array is incompatible. It needs to be either ({N_global},2x{prob.DoF}) or (2x{prob.DoF},).")
+#    if prob.flag == 1:
+#        if m.shape == (N_global, 2*prob.DoF):
+#            m_global = m.copy()
+#        elif m.shape == (2*prob.DoF,):
+#            m_global = m * np.ones((N_global,2*prob.DoF))
+#        else:
+#            sys.exit(f" >> Shape of mass array is incompatible. It needs to be either ({N_global},2x{prob.DoF}) or (2x{prob.DoF},).")
+#
+#    else:
+#        if m.shape == (N_global, prob.DoF):
+#            m_global = m.copy()
+#        elif m.shape == (prob.DoF,):
+#            m_global = m * np.ones((N_global,prob.DoF))
+#        else:
+#            sys.exit(f" >> Shape of mass array is incompatible. It needs to be either ({N_global},{prob.DoF}) or ({prob.DoF},).")
 
+    if m.shape == (N_global, prob.DoF):
+        m_global = m.copy()
+    elif m.shape == (prob.DoF,):
+        m_global = m * np.ones((N_global,prob.DoF))
     else:
-        if m.shape == (N_global, prob.DoF):
-            m_global = m.copy()
-        elif m.shape == (prob.DoF,):
-            m_global = m * np.ones((N_global,prob.DoF))
-        else:
-            sys.exit(f" >> Shape of mass array is incompatible. It needs to be either ({N_global},{prob.DoF}) or ({prob.DoF},).")
+        sys.exit(f" >> Shape of mass array is incompatible. It needs to be either ({N_global},{prob.DoF}) or ({prob.DoF},).")
 
     for i in range(N_global):
         for j in range(m_global.shape[1]):
@@ -243,21 +235,12 @@ t{LC_val[0,6]-LC_val[0,5]}\n")
     elif prob.flag == 4:
         file.write("**b(1), b(2), b(3), b(4), b(5), b(6)\n")
 
-    if prob.flag == 1:
-        if b.shape == (N_global, 2*prob.DoF):
-            b_global = b.copy()
-        elif m.shape == (2*prob.DoF,):
-            b_global = b * np.ones((N_global,2*prob.DoF))
-        else:
-            sys.exit(f" >> Shape of on-site damping array is incompatible. It needs to be either ({N_global},2x{prob.DoF}) or (2x{prob.DoF},).")
-
+    if b.shape == (N_global, prob.DoF):
+        b_global = b.copy()
+    elif b.shape == (prob.DoF,):
+        b_global = b * np.ones((N_global,prob.DoF))
     else:
-        if b.shape == (N_global, prob.DoF):
-            b_global = b.copy()
-        elif b.shape == (prob.DoF,):
-            b_global = b * np.ones((N_global,prob.DoF))
-        else:
-            sys.exit(f" >> Shape of on-site damping array is incompatible. It needs to be either ({N_global},{prob.DoF}) or ({prob.DoF},).")
+        sys.exit(f" >> Shape of on-site damping array is incompatible. It needs to be either ({N_global},{prob.DoF}) or ({prob.DoF},).")
 
     for i in range(N_global):
         for j in range(b_global.shape[1]):
