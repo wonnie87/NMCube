@@ -10,6 +10,7 @@ program main_nb
 !! 11/03/2020   Myungwon Hwang   Rev00: Initial working program
 !! 08/10/2021   Myungwon Hwang   Syntax update to match that of RK solver
 !! 11/30/2021   Myungwon Hwang   Rev01: Output data structure match that of RK solver
+!! 03/23/2022   Myungwon Hwang   Rev02: Refactored the code
 !!
 
 use hdf5_helpers
@@ -20,7 +21,6 @@ implicit none
 !include 'mpif.h' ! if 'use mpi' does not work
 
 !! Data dictionary: Constants
-real, parameter :: PI=3.141592653589793
 !! Data dictionary: MPI-related
 integer :: mpi_ierr, noProc, procID, status(MPI_STATUS_SIZE), mpi_errcode
 integer, allocatable, dimension(:) :: scatter_sc, scatter_sc2, scatter_sc_m ! No. of data to be sent for each process for MPI_SCATTERV
@@ -29,9 +29,9 @@ real :: tWallclockStart, tWallclockEnd ! wall clock time of the start and the en
 !! Data dictionary: hdf5-related
 character(88) :: filename
 integer(HID_T) :: file_id, dspace_m_id, dspace_t_id, dspace_u_id, dspace_f_id, mspace_t_id, mspace_u_id, mspace_f_id
-integer(HID_T) :: aspace_PT_id, aspace_N_id, aspace_G_id, aspace_L_id, aspace_k_id, aspace_f_UC_id, attr_id
+integer(HID_T) :: aspace_PT_id, aspace_N_id, aspace_s_id, aspace_f_UC_id, attr_id
 integer(HID_T) :: dset_m_id, dset_t_id, dset_u_id, dset_udot_id, dset_f_id, dset_uddot_id 
-integer(HSIZE_T), dimension(1:1) :: dimsa_PT, dimsa_N, dimsa_G, dimsa_L, dimsa_k, dimsa_f_UC
+integer(HSIZE_T), dimension(1:1) :: dimsa_PT, dimsa_N, dimsa_s, dimsa_f_UC
 integer(HSIZE_T), dimension(1:1) :: dims_m, dims_t, dimsm_t
 integer(HSIZE_T), dimension(1:1) :: hslab_t_offset, hslab_t_count, hslab_t_stride, hslab_t_block
 integer(HSIZE_T), dimension(1:2) :: dims_u, dimsm_u, dims_f, dimsm_f
@@ -44,13 +44,10 @@ character(len=80) :: dsetname
 !! Data dictionary: input parameters
 integer :: N_global ! Total No. of unit cells
 integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 4: metabeam
-integer :: DoF ! unit cell degrees of freedom
 real, allocatable, dimension(:) :: m_global ! global mass array
 real, allocatable, dimension(:) :: b_global ! global damping array
 integer, dimension(0:2) :: BC ! boundary condition flag
-real, dimension(9) :: k ! spring stiffness array
-real, dimension(4) :: L ! length array containing unit cell geometry information
-real :: G ! gravitational acceleration
+real, allocatable, dimension(:) :: s ! parameter array
 integer, allocatable, dimension(:) :: LC
 real, allocatable, dimension(:) :: LC_val
 logical, allocatable, dimension(:) :: LC_mask
@@ -98,12 +95,12 @@ real, allocatable, dimension(:) :: uddot_loc ! accelerations of unit cells for e
 integer :: startnode_loc, endnode_loc ! corresponding local node numbers
 real, allocatable, dimension(:) :: p_loc ! external force
 real, allocatable, dimension(:) :: phat_loc ! phat(i+1)=p(i+1)+a1*u(i)+a2*udot(i)+m*uddot(i)
-real, allocatable, dimension(:) :: a1_loc, a2_loc, a3_loc, m_loc ! corresponding local array
+real, allocatable, dimension(:) :: a1_loc, a2_loc, a3_loc ! corresponding local array
 !! Data dictionary: temporary computational variables
 integer :: it, it2, ind
 integer :: cnt1
 real(kind=DBL) :: t ! current simulation time
-real, dimension(6) :: fs
+real, allocatable, dimension(:) :: fs
 real, allocatable, dimension(:) :: uOld_loc ! displacements of the previous time step
 integer :: tmpI1
 real :: tmpR1, tmpR2
@@ -161,102 +158,45 @@ if (procID == 0) then
             end if
             read (2,'(/I10)') prob_flag
             read (2,*); read (2,*) BC(0:2)
+
             if (prob_flag == 1) then
-                read (2,*); read (2,*) G
-                read (2,*); read (2,*) k(1)
-                read (2,*); read (2,*) L(1)
-                read (2,*); read (2,*) LC_dim2
-
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-
-                allocate(m_global(2*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(2*it-1:2*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it)
-                end do
-
+                s_dim = 4
             else if (prob_flag == 2) then
-                read (2,*); read (2,*) k(1:5)
-                read (2,*); read (2,*) LC_dim2
-
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-                
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-
-                allocate(m_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(DoF*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it)
-                end do
-
+                s_dim = 5
             else if (prob_flag == 4) then
-                read (2,*); read (2,*) k(1:8)
-                read (2,*); read (2,*) L(1:4)
-                read (2,*); read (2,*) LC_dim2
-
-                allocate(f_val(LC_dim2), STAT=f_stat)
-                allocate(LC(3*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC(3*it-2:3*it)
-                end do
-                
-                allocate(LC_val(7*LC_dim2), STAT=f_stat)
-                read (2,*)
-                do it = 1, LC_dim2
-                    read (2,*) LC_val(7*it-6:7*it)
-                end do
-
-                read (2,'(/I10)') DoF
-
-                allocate(m_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) m_global(DoF*it-5:DoF*it)
-                end do
-
-                allocate(b_global(DoF*N_global), STAT=f_stat)
-                read (2,*)
-                do it = 1, N_global
-                    read (2,*) b_global(DoF*it-5:DoF*it)
-                end do
+                s_dim = 12
             end if
+            
+            allocate(s(s_dim), STAT=f_stat)
+            read (2,*); read (2,*) s(1:s_dim)
+            read (2,*); read (2,*) LC_dim2
+
+            allocate(f_val(LC_dim2), STAT=f_stat)
+            allocate(LC(3*LC_dim2), STAT=f_stat)
+            read (2,*)
+            do it = 1, LC_dim2
+                read (2,*) LC(3*it-2:3*it)
+            end do
+            
+            allocate(LC_val(7*LC_dim2), STAT=f_stat)
+            read (2,*)
+            do it = 1, LC_dim2
+                read (2,*) LC_val(7*it-6:7*it)
+            end do
+
+            read (2,'(/I10)') DoF
+
+            allocate(m_global(DoF*N_global), STAT=f_stat)
+            read (2,*)
+            do it = 1, N_global
+                read (2,*) m_global(DoF*(it-1)+1:DoF*it)
+            end do
+
+            allocate(b_global(DoF*N_global), STAT=f_stat)
+            read (2,*)
+            do it = 1, N_global
+                read (2,*) b_global(DoF*(it-1)+1:DoF*it)
+            end do
 
             allocate(u(DoF*N_global), STAT=f_stat)
             allocate(udot(DoF*N_global), STAT=f_stat)
@@ -301,39 +241,28 @@ call MPI_BCAST(N_global, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 !tol_inv = N_global*tol_inv
 call MPI_BCAST(prob_flag, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(BC(0), 3, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(s_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+if (procID /= 0) then
+    allocate(s(s_dim), STAT=f_stat)
+    allocate(LC(3*LC_dim2), STAT=f_stat)
+    allocate(LC_val(7*LC_dim2), STAT=f_stat)
+end if
+call MPI_BCAST(s(1), s_dim, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+
+allocate(fs(DoF), STAT=f_stat)
 if (prob_flag == 1) then
-    call MPI_BCAST(G, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(k(1), 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(L(1), 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_fs => calc_fs_pendula
+    p_calc_kThat => calc_kThat_pendula
 else if (prob_flag == 2) then
-    call MPI_BCAST(k(1), 5, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_fs => calc_fs_phi4
+    p_calc_kThat => calc_kThat_phi4
 else if (prob_flag == 4) then
-    call MPI_BCAST(k(1), 8, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(L(1), 4, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    if (procID /= 0) then
-        allocate(LC(3*LC_dim2), STAT=f_stat)
-        allocate(LC_val(7*LC_dim2), STAT=f_stat)
-    end if
-    call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-    call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+    p_calc_fs => calc_fs_metabeam
+    p_calc_kThat => calc_kThat_metabeam
 end if
 
 N_fl = N_global/noProc
@@ -405,52 +334,23 @@ if (procID == 0) then
 ! Parallelization of this step may improve the scaling with number of processes
     do it=1, N_global
         if (it == 1) then
-            if (prob_flag == 1) then
-                call calc_fs_pendula(BC(1), 0, 1, u(it), G, m_global(2*it-1), k, L, fs)
-            else if (prob_flag == 2) then
-                call calc_fs_phi4(BC(1), 0, 1, u(it), k, fs)
-            else if (prob_flag == 4) then
-                call calc_fs_metabeam(BC(1), 0, 11, u(6*it-5), k, L, fs)
-            end if
+            call p_calc_fs(BC(1), 0, 2*DoF-1, u(DoF*(it-1)+1), s, fs)
         else if (it == N_global) then
-            if (prob_flag == 1) then
-                call calc_fs_pendula(BC(2), -1, 0, u(it-1), G, m_global(2*it-1), k, L, fs)
-            else if (prob_flag == 2) then
-                call calc_fs_phi4(BC(2), -1, 0, u(it-1), k, fs)
-            else if (prob_flag == 4) then
-                call calc_fs_metabeam(BC(2), -6, 5, u(6*it-11), k, L, fs)
-            end if
+            call p_calc_fs(BC(2), -DoF, DoF-1, u(DoF*(it-2)+1), s, fs)
         else
-            if (prob_flag == 1) then
-                call calc_fs_pendula(BC(0), -1, 1, u(it-1), G, m_global(2*it-1), k, L, fs)
-            else if (prob_flag == 2) then
-                call calc_fs_phi4(BC(0), -1, 1, u(it-1), k, fs)
-            else if (prob_flag == 4) then
-                call calc_fs_metabeam(BC(0), -6, 11, u(6*it-11), k, L, fs)
-            end if
+            call p_calc_fs(BC(0), -DoF, 2*DoF-1, u(DoF*(it-2)+1), s, fs)
         end if
 
         do it2=1, DoF
             ind = DoF*it-DoF+it2
 ! Need to be modified if nonzero external force p
-            if (prob_flag == 1) then
-                uddot(ind) = (-b_global(ind)*udot(ind)-fs(it2))/m_global(2*ind-1)
-            else
-                uddot(ind) = (-b_global(ind)*udot(ind)-fs(it2))/m_global(ind)
-            end if
+            uddot(ind) = (-b_global(ind)*udot(ind)-fs(it2))/m_global(ind)
         end do
     end do
 
-! calculation for a, b, khat arrays
-    if (prob_flag == 1) then
-        a1_global = m_global(1:2*N_global:2)/(beta_nb*dt**2) + b_global*gamma_nb/(beta_nb*dt)
-        a2_global = m_global(1:2*N_global:2)/(beta_nb*dt) + b_global*(gamma_nb/beta_nb-1)
-        a3_global = m_global(1:2*N_global:2)*(1/(2*beta_nb)-1) + b_global*dt*(gamma_nb/(2*beta_nb)-1)
-    else
-        a1_global = m_global/(beta_nb*dt**2) + b_global*gamma_nb/(beta_nb*dt)
-        a2_global = m_global/(beta_nb*dt) + b_global*(gamma_nb/beta_nb-1)
-        a3_global = m_global*(1/(2*beta_nb)-1) + b_global*dt*(gamma_nb/(2*beta_nb)-1)
-    end if
+    a1_global = m_global/(beta_nb*dt**2) + b_global*gamma_nb/(beta_nb*dt)
+    a2_global = m_global/(beta_nb*dt) + b_global*(gamma_nb/beta_nb-1)
+    a3_global = m_global*(1/(2*beta_nb)-1) + b_global*dt*(gamma_nb/(2*beta_nb)-1)
 ! end STEP 1
 end if
 
@@ -463,9 +363,6 @@ allocate(phat_loc(DoF*N_loc), STAT=f_stat)
 allocate(a1_loc(DoF*N_loc), STAT=f_stat)
 allocate(a2_loc(DoF*N_loc), STAT=f_stat)
 allocate(a3_loc(DoF*N_loc), STAT=f_stat)
-if (prob_flag ==1) then
-    allocate(m_loc(2*N_loc), STAT=f_stat)
-end if
 
 call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
 tWallclockStart = MPI_WTIME()
@@ -483,10 +380,6 @@ call MPI_SCATTERV(a2_global, scatter_sc, scatter_disp, MPI_DOUBLE_PRECISION, a2_
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_SCATTERV(a3_global, scatter_sc, scatter_disp, MPI_DOUBLE_PRECISION, a3_loc, DoF*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-if (prob_flag == 1) then
-    call MPI_SCATTERV(m_global, scatter_sc_m, scatter_disp_m, MPI_DOUBLE_PRECISION, m_loc, 2*N_loc, &
-    & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-end if
 
 deallocate(a1_global, STAT=f_stat)
 deallocate(a2_global, STAT=f_stat)
@@ -518,26 +411,11 @@ if ( procID == 0 ) then
 
     dimsa_PT = (/ 1 /)
     dimsa_N = (/ 1 /)
-    if (prob_flag == 1) then
-        dimsa_G = (/ 1 /)
-        dimsa_L = (/ 1 /)
-        dimsa_k = (/ 1 /)
-    else if (prob_flag == 2) then
-        dimsa_k = (/ 5 /)
-    else if (prob_flag == 4) then
-        dimsa_L = (/ 4 /)
-        dimsa_k = (/ 9 /)
-    end if
+    dimsa_s = (/ s_dim /)
     dimsa_f_UC = (/ LC_dim2 /)
     call h5screate_simple_f(1, dimsa_PT, aspace_PT_id, hdf5_ierr)
     call h5screate_simple_f(1, dimsa_N, aspace_N_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5screate_simple_f(1, dimsa_G, aspace_G_id, hdf5_ierr)
-        call h5screate_simple_f(1, dimsa_L, aspace_L_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5screate_simple_f(1, dimsa_L, aspace_L_id, hdf5_ierr)
-    end if
-    call h5screate_simple_f(1, dimsa_k, aspace_k_id, hdf5_ierr)
+    call h5screate_simple_f(1, dimsa_s, aspace_s_id, hdf5_ierr)
     call h5screate_simple_f(1, dimsa_f_UC, aspace_f_UC_id, hdf5_ierr)
     call h5acreate_f(file_id, "ProblemType", H5T_NATIVE_INTEGER, aspace_PT_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, prob_flag, dimsa_PT, hdf5_ierr)
@@ -545,20 +423,8 @@ if ( procID == 0 ) then
     call h5acreate_f(file_id, "N", H5T_NATIVE_INTEGER, aspace_N_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, N_global, dimsa_N, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5acreate_f(file_id, "G", H5T_NATIVE_REAL, aspace_G_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, G, dimsa_G, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-        call h5acreate_f(file_id, "L", H5T_NATIVE_REAL, aspace_L_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, L, dimsa_L, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5acreate_f(file_id, "L", H5T_NATIVE_REAL, aspace_L_id, attr_id, hdf5_ierr)
-        call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, L, dimsa_L, hdf5_ierr)
-        call h5aclose_f(attr_id, hdf5_ierr)
-    end if
-    call h5acreate_f(file_id, "k", H5T_NATIVE_REAL, aspace_k_id, attr_id, hdf5_ierr)
-    call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, k, dimsa_k, hdf5_ierr)
+    call h5acreate_f(file_id, "Parameters", H5T_NATIVE_REAL, aspace_s_id, attr_id, hdf5_ierr)
+    call h5awrite_f(attr_id, H5T_NATIVE_DOUBLE, s, dimsa_s, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
     call h5acreate_f(file_id, "f_UC", H5T_NATIVE_INTEGER, aspace_f_UC_id, attr_id, hdf5_ierr)
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, LC(1:3*LC_dim2:3), dimsa_f_UC, hdf5_ierr)
@@ -567,20 +433,10 @@ if ( procID == 0 ) then
     call h5awrite_f(attr_id, H5T_NATIVE_INTEGER, LC(2:3*LC_dim2:3), dimsa_f_UC, hdf5_ierr)
     call h5aclose_f(attr_id, hdf5_ierr)
     call h5sclose_f(aspace_N_id, hdf5_ierr)
-    if (prob_flag == 1) then
-        call h5sclose_f(aspace_G_id, hdf5_ierr)
-        call h5sclose_f(aspace_L_id, hdf5_ierr)
-    else if (prob_flag == 4) then
-        call h5sclose_f(aspace_L_id, hdf5_ierr)
-    end if
-    call h5sclose_f(aspace_k_id, hdf5_ierr)
+    call h5sclose_f(aspace_s_id, hdf5_ierr)
     call h5sclose_f(aspace_f_UC_id, hdf5_ierr)
 
-    if (prob_flag == 1) then
-        dims_m = (/ 2*N_global /)
-    else if (prob_flag == 2 .or. prob_flag ==4) then
-        dims_m = (/ DoF*N_global /)
-    end if
+    dims_m = (/ DoF*N_global /)
     call h5screate_simple_f(1, dims_m, dspace_m_id, hdf5_ierr)
     call h5dcreate_f(file_id, "/m", H5T_NATIVE_REAL, dspace_m_id, dset_m_id, hdf5_ierr)
     call h5dwrite_f(dset_m_id, H5T_NATIVE_DOUBLE, m_global, dims_m, hdf5_ierr)
@@ -639,9 +495,9 @@ do
     p_loc = 0.
     phat_loc = 0.
     do it = 1, LC_loc_dim2
-        call calc_load(LC_loc(1,it), LC_val_loc(1,it), t, L, &
+        call calc_load(LC_loc(1,it), LC_val_loc(1,it), t, &
             & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-            & u_loc( DoF*LC_loc(1,it)+LC_loc(2,it) ) )
+            & u_loc( DoF*LC_loc(1,it)+LC_loc(2,it) ) ) ! modify s.t. it can handle LC=13
         f_val_loc(it) = p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) )
     end do 
 
@@ -651,13 +507,9 @@ do
     end do
     uOld_loc = u_loc
 
-    if (prob_flag == 1) then
-        call NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, prob_flag, DoF, BC, k, L, &
-        & a1_loc, phat_loc, u_loc, N_inv, tol_inv, t, cnt_NR, cnt_inv, t_NR_total, t_inv_total, G, m_loc)
-    else
-        call NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, prob_flag, DoF, BC, k, L, &
-        & a1_loc, phat_loc, u_loc, N_inv, tol_inv, t, cnt_NR, cnt_inv, t_NR_total, t_inv_total)
-    end if
+    !! Check the following implementation in sub_nb.f90
+    call NR_iterations(N_NR, tol_NR, N_loc, procID, noProc, prob_flag, BC, s, &
+    & a1_loc, phat_loc, u_loc, N_inv, tol_inv, t, cnt_NR, cnt_inv, t_NR_total, t_inv_total)
 
     ind = DoF*(N_loc+1)
     uddot_loc = (u_loc(DoF+1:ind) - uOld_loc(DoF+1:ind))/(beta_nb*dt**2) - udot_loc/(beta_nb*dt) - uddot_loc*(1/(2*beta_nb)-1)

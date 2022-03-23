@@ -52,7 +52,7 @@ real :: tStart, tEnd ! simulation start and end times
 real :: c2, c3, c4, a21, a31, a32, a41, a42, a43, b1, b2, b3, b4 ! RK coefficents
 integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 4: metabeam
 integer, dimension(0:2) :: BC ! boundary condition
-real, dimension(12) :: s = 0.0 ! parameter array
+real, allocatable, dimension(:) :: s ! parameter array
 real :: u_0 ! Initial displacement of each bistable element
 real :: uDot_0 ! Initial velocity of each bistable element
 integer, allocatable, dimension(:) :: LC
@@ -148,6 +148,7 @@ if (procID == 0) then
                 s_dim = 12
             end if
 
+            allocate(s(s_dim), STAT=f_stat)
             read (2,*); read (2,*) s(1:s_dim)
             read (2,*); read (2,*) LC_dim2
 
@@ -240,12 +241,12 @@ call MPI_BCAST(N_global, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(prob_flag, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(BC(0), 3, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(s_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
-call MPI_BCAST(s(1), s_dim, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 if (procID /= 0) then
+    allocate(s(s_dim), STAT=f_stat)
     allocate(LC(3*LC_dim2), STAT=f_stat)
     allocate(LC_val(7*LC_dim2), STAT=f_stat)
 end if
+call MPI_BCAST(s(1), s_dim, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(LC(1), 3*LC_dim2, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(LC_val(1), 7*LC_dim2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(DoF, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)

@@ -12,7 +12,7 @@ dt = 1.0e-5 # time step
 tStart = 0.0 # start of simulation time
 tEnd = 6.0 # end of simulation time
 dtWrite = 1.0e-3 # file wirte frequency
-sol_flag = 'RK4' # choose among RK1, RK2, RK3, RK4, and NB
+sol_flag = 'NB' # choose among RK1, RK2, RK3, RK4, and NB
 
 #### Optional inputs ####
 #sol_params = {
