@@ -434,6 +434,7 @@ contains
     real, intent(in), dimension(s_dim) :: s !
     real, intent(in), dimension(DoF) :: a !
     real, intent(out), dimension(3*DoF*DoF) :: kThat !
+    integer :: it
 
     kThat = 0.
     if (BC_flag == 100) then ! baseline, periodic
@@ -2936,12 +2937,9 @@ contains
 
     end if
 
-    kThat(7) = kThat(7) + a(1)
-    kThat(26) = kThat(26) + a(2)
-    kThat(45) = kThat(45) + a(3)
-    kThat(64) = kThat(64) + a(4)
-    kThat(83) = kThat(83) + a(5)
-    kThat(102) = kThat(102) + a(6)
+    do it = 1, DoF
+        kThat(3*DoF*(it-1)+DoF+it) = kThat(3*DoF*(it-1)+DoF+it) + a(it)
+    end do
 
     end subroutine calc_kThat_metabeam
 
@@ -2984,6 +2982,7 @@ contains
     real, intent(in), dimension(s_dim) :: s
     real, intent(in), dimension(DoF) :: a
     real, intent(out), dimension(3*DoF*DoF) :: kThat
+    integer :: it
 
     if (BC_flag == 100) then
         kThat(1) = -s(1)
@@ -3003,7 +3002,9 @@ contains
         kThat(3) = 0.
     end if
 
-    kThat(2) = kThat(2) + a(1)
+    do it = 1, DoF
+        kThat(3*DoF*(it-1)+DoF+it) = kThat(3*DoF*(it-1)+DoF+it) + a(it)
+    end do
 
     end subroutine calc_kThat_pendula
 
@@ -3044,8 +3045,8 @@ contains
     real, intent(in), dimension(s_dim) :: s !
     real, intent(in), dimension(DoF) :: a
     real, intent(out), dimension(3*DoF*DoF) :: kThat !
+    integer :: it
 
-    kThat = 0.
     if (BC_flag == 100) then ! baseline, periodic
         kThat(1) = -s(1)
         kThat(2) = 2*s(1) + 2*s(3) + 6*s(4)*u(0) + 12*s(5)*u(0)**2
@@ -3060,7 +3061,9 @@ contains
         kThat(3) = 0.
     end if
 
-    kThat(2) = kThat(2) + a(1)
+    do it = 1, DoF
+        kThat(3*DoF*(it-1)+DoF+it) = kThat(3*DoF*(it-1)+DoF+it) + a(it)
+    end do
 
     end subroutine calc_kThat_phi4
 
