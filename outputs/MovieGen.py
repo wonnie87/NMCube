@@ -4,10 +4,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as ani
 import matplotlib as mpl
 
-filename = "P1_d01_F0.0_f0.0_RK4.h5"
+#filename = "P1_d01_F0.0_f0.0_RK4.h5"
+#filename = "P1_d01nl_F0.0_f0.0_RK4.h5"
 #filename = "P2_d02_F0.0_f0.0_RK4.h5"
 #filename = "P4_d04_F1.4_f35.0_RK4.h5"
-#filename = "P4_d04_F0.1_f8.0_RK4.h5"
+filename = "P4_d04_F0.1_f8.0_RK4.h5"
 fskip = 100
 f = h5py.File(filename, 'r')
 
@@ -54,7 +55,7 @@ if prob_flag == 1:
         return mass, line, time_text
 
     N = f.attrs["N"][0]
-    L = f.attrs["L"][0]
+    L = f.attrs["Parameters"][3]
 
     fig = plt.figure(figsize=(16,8))
     ax0 = fig.add_axes((0.1, 0.7, 0.85, 0.2))
@@ -220,7 +221,7 @@ elif prob_flag == 4:
         return mass, line1, line2, line3, line4, line5, line6, time_text
 
     N = f.attrs["N"][0]
-    L = f.attrs["L"]
+    L = f.attrs["Parameters"][8:]
 
     fig = plt.figure(figsize=(16,12))
     #fig, axes = plt.subplots(2, 1, figsize=(16,8), gridspec_kw={'height_ratios': [1,3]})

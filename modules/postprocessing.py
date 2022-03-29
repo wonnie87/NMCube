@@ -85,11 +85,11 @@ def MovieGen(filename, fskip):
                 ymin = u.min(); ymax = u.max()
 
             ax1.set_ylim(1.1*ymin,1.1*ymax)
-            time_text.set_text("Time = {:8.3f}".format(t))
+            time_text.set_text("Time = {:10.4f}".format(t))
             return mass, line, time_text
 
         N = f.attrs["N"][0]
-        L = f.attrs["L"][0]
+        L = f.attrs["Parameters"][0]
 
         fig = plt.figure(figsize=(16,8))
         ax0 = fig.add_axes((0.1, 0.7, 0.85, 0.2))
@@ -138,7 +138,7 @@ def MovieGen(filename, fskip):
                 ymin = u.min(); ymax = u.max()
 
             ax1.set_ylim(1.1*ymin,1.1*ymax)
-            time_text.set_text("Time = {:8.3f}".format(t))
+            time_text.set_text("Time = {:10.4f}".format(t))
             return mass, line, time_text
 
         N = f.attrs["N"][0]
@@ -248,11 +248,11 @@ def MovieGen(filename, fskip):
                 y5min = u3.min(); y5max = u3.max()
                 y6min = w3.min(); y6max = w3.max()
 
-            time_text.set_text("Time = {:8.3f}".format(t))
+            time_text.set_text("Time = {:10.4f}".format(t))
             return mass, line1, line2, line3, line4, line5, line6, time_text
 
         N = f.attrs["N"][0]
-        L = f.attrs["L"]
+        L = f.attrs["Parameters"][8:]
 
         fig = plt.figure(figsize=(16,12))
         ax0 = fig.add_axes((0.1, 0.80, 0.85, 0.15))
