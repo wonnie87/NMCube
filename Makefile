@@ -11,11 +11,11 @@ endif
 #I_FLAG = -I/usr/include/hdf5/openmpi # Example path for Deb-based Linux
 #I_FLAG = -I/usr/lib64/gfortran/modules/openmpi # Example path for RHEL-based Linux
 #I_FLAG = -I/usr/local/Cellar/hdf5-mpi/1.12.1/include # Example path for MacOS 
-L_FLAG = -lhdf5_fortran
-#L_FLAG = -L${DIR_TO_HDF5_LIB} -lhdf5_fortran # specify directory to HDF5 library if not in default PATH.
-#L_FLAG = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5_fortran # Example path for Deb-based Linux
-#L_FLAG = -L/usr/lib64/openmpi/lib -lhdf5_fortran # Example path for RHEL-based Linux
-#L_FLAG = -L/usr/local/Cellar/hdf5-mpi/1.12.1/lib -lhdf5_fortran # Example path for MacOS 
+L_FLAG = -lhdf5_fortran -lhdf5
+#L_FLAG = -L${DIR_TO_HDF5_LIB} -lhdf5_fortran -lhdf5 # specify directory to HDF5 library if not in default PATH.
+#L_FLAG = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5_fortran -lhdf5 # Example path for Deb-based Linux
+#L_FLAG = -L/usr/lib64/openmpi/lib -lhdf5_fortran -lhdf5 # Example path for RHEL-based Linux
+#L_FLAG = -L/usr/local/Cellar/hdf5-mpi/1.12.1/lib -lhdf5_fortran -lhdf5 # Example path for MacOS
 MPIRUN = mpirun
 #MPIRUN = /usr/lib64/openmpi/bin/mpirun # Default binary path on Fedora
 MPIRUN_FLAG = -np
