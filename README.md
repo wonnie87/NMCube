@@ -3,7 +3,8 @@ This is the repository for the source codes used in paper:
 
 **High-Performance Large-Scale Simulation of Multi-stable Metastructures**
 
-M. Hwang, C. Scalo, and A. F. Arrieta, *In Review*.  
+M. Hwang, C. Scalo, and A. F. Arrieta, *Computer Physics Communications*, 2022.  
+DOI: [https://doi.org/10.1016/j.cpc.2022.108365](https://doi.org/10.1016/j.cpc.2022.108365)  
 
 ## Program overview
 **NM^3** is massively parallel code for solving general multi-stable mechanical metamaterials and metastructures.
