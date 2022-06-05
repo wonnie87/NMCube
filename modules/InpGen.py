@@ -142,6 +142,11 @@ def DesignGen(sol_flag,des,N_global,prob,BC,s,m,b,LC,LC_val,u0,udot0):
     elif LC[0,2] == 2:
         file.write(f"P{prob.flag}_{des}_F{LC_val[0,2]}_f{LC_val[0,3]}_\
 t{LC_val[0,6]-LC_val[0,5]}\n")
+    elif LC[0,2] == 3:
+        file.write(f"P{prob.flag}_{des}_F{LC_val[0,2]}_f{LC_val[0,3]}_\
+ramp_t{(LC_val[0,6]-LC_val[0,5])/2}\n")
+    elif LC[0,2] == 9:
+        file.write(f"P{prob.flag}_{des}_F{LC_val[0,2]}_f{LC_val[0,3]}_rand\n")
     elif LC[0,2] == 11 or LC[0,2] == 13:
         file.write(f"P{prob.flag}_{des}_A{LC_val[0,2]}_f{LC_val[0,3]}\n")
 

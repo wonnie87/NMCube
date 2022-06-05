@@ -464,7 +464,7 @@ do
     do it = 1, LC_loc_dim2
         call calc_load(LC_loc(1,it), LC_val_loc(1,it), 0., t, dt, &
             & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-            & x_loc( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) ) ! modify s.t. it can handle LC=13
+            & x_loc( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ), s(9) ) ! modify s.t. it can handle LC=13
         f_val_loc(it) = p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) )
     end do
             
@@ -533,7 +533,7 @@ do
         do it = 1, LC_loc_dim2
             call calc_load(LC_loc(1,it), LC_val_loc(1,it), c2, t, dt, &
                 & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-                & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
+                & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ), s(9) )
         end do
             
         do it2 = 1, N_loc
@@ -588,7 +588,7 @@ do
             do it = 1, LC_loc_dim2
                 call calc_load(LC_loc(1,it), LC_val_loc(1,it), c3, t, dt, &
                     & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-                    & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
+                    & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ), s(9) )
             end do
             
             do it2 = 1, N_loc
@@ -643,7 +643,7 @@ do
                 do it = 1, LC_loc_dim2
                     call calc_load(LC_loc(1,it), LC_val_loc(1,it), c4, t, dt, &
                         & p_loc( DoF*(LC_loc(1,it)-1) + LC_loc(2,it) ), &
-                        & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ) )
+                        & xTmp( noState*LC_loc(1,it)+2*LC_loc(2,it)-1 ), s(9) )
                 end do
             
                 do it2 = 1, N_loc
