@@ -68,7 +68,9 @@ s = np.array([1.241, 0.6*1.793, 0.6, 100., 100., 100., 100., 100., 20., 40., 20.
     ##   11-sine disp input, 12-modulated sine disp input, 
     ##   13-long-stroke harmonic disp input
     ## Accompanied by the corresponding LC_val array
-    ##   e.g., LC_val = [tForceStart, tForceEnd, amp, freqIn, phi0, c1, c2] for Loadcase 1
+    ##   e.g., LC_val = [tForceStart, tForceEnd, amp, freqIn, phi0, 0., 0.] for Loadcase 1
+    ##                                       *Last two entries are not used for Loadcase 1
+    ##   e.g., LC_val = [tForceStart, tForceEnd, amp, freqIn, phi0, c1, c2] for Loadcase 2
 LC = np.array([[1,1,1]]) # Load cases: [[UC, local DoF, Loadcase], ... ]
 amp = 1.4
 freqIn = 35.0
