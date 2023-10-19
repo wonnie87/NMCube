@@ -161,7 +161,7 @@ if (procID == 0) then
             else if (prob_flag == 4) then
                 s_dim = 12
             else if (prob_flag == 45) then
-                s_dim = 42
+                s_dim = 62
             end if
 
             allocate(s(s_dim), STAT=f_stat)
