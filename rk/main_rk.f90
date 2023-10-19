@@ -24,8 +24,8 @@ procedure (calc_f_metabeam), pointer :: p_calc_f => NULL()
 !! Data dictionary: Constants
 !! Data dictionary: MPI-related
 integer :: mpi_ierr, noProc, procID, status(MPI_STATUS_SIZE), mpi_errcode
-integer, allocatable, dimension(:) :: scatter_sc, scatter_sc2, scatter_sc3 ! number of data to be sent for each process for MPI_SCATTERV
-integer, allocatable, dimension(:) :: scatter_disp, scatter_disp2, scatter_disp3 ! the starting counter for MPI_SCATTERV
+integer, allocatable, dimension(:) :: scatter_sc, scatter_sc_m, scatter_sc_b, scatter_sc3 ! number of data to be sent for each process for MPI_SCATTERV
+integer, allocatable, dimension(:) :: scatter_disp, scatter_disp_m, scatter_disp_b, scatter_disp3 ! the starting counter for MPI_SCATTERV
 real :: tWallclockStart, tWallclockEnd ! wall clock time of the star and the end of the execution
 !! Data dictionary: HDF5-related
 character(80) :: filename, filename_h5
@@ -50,6 +50,8 @@ real(kind=DBL) :: dt ! numerical time steps
 real(kind=DBL) :: dtWrite ! output write frequency
 real :: tStart, tEnd ! simulation start and end times
 real :: c2, c3, c4, a21, a31, a32, a41, a42, a43, b1, b2, b3, b4 ! RK coefficents
+integer :: N_inv ! max number of iterations for conjugate gradient method
+real :: tol_inv ! tolerance for conjugate gradient method
 integer :: prob_flag ! 1: pendula chain, 2: phi-4 lattice, 4: metabeam
 integer, dimension(0:2) :: BC ! boundary condition
 real, allocatable, dimension(:) :: s ! parameter array
@@ -71,6 +73,11 @@ real, allocatable, dimension(:) :: k1_global ! global reaction force array
 !! Data dictionary: local variables
 integer :: N_fl, N_ceil ! min and max number of N_loc across the processes
 integer :: N_loc ! number of unit cells per process
+real, allocatable, dimension(:) :: A_loc ! 
+real, allocatable, dimension(:) :: Ainv_col ! Consider removing
+real, allocatable, dimension(:) :: Ainv_loc ! 
+!real, dimension(1944) :: Ainv_loc ! 
+real, allocatable, dimension(:) :: svec ! 
 real, allocatable, dimension(:) :: x_loc ! state space for each local process
 real, allocatable, dimension(:) :: m_loc, b_loc ! local mass/damping arrays
 real, allocatable, dimension(:) :: p_loc ! external force calculated at each time step
@@ -79,9 +86,14 @@ real, allocatable, dimension(:) :: p_loc ! external force calculated at each tim
 integer :: it, it2, it3
 integer :: cnt1
 real(kind=DBL) :: t ! current simulation time 
-real, allocatable, dimension(:) :: k1, k2, k3, k4 ! RK method
+real, allocatable, dimension(:) :: k1, k2, k3, k4, f ! RK method
 real, allocatable, dimension(:) :: xTmp ! ...
 real, allocatable, dimension(:) :: f_val, f_val_loc ! store force value at each iteration
+
+!! Data dictionary: code testing
+real, dimension(3*3) :: A_test
+real, dimension(3+2) :: Ainv_col_test
+real, dimension(3) :: svec_test
 
 
 call MPI_INIT(mpi_ierr)
@@ -114,6 +126,8 @@ if (procID == 0) then
                 read (1,*); read (1,*) a21, a31, a32, a41, a42, a43
                 read (1,*); read (1,*) b1, b2, b3, b4
             end if
+            read (1,*); read (1,*) tol_inv
+            read (1,*); read (1,*) N_inv
             read (1,*); read (1,*) dt
             read (1,*); read (1,*) tStart
             read (1,*); read (1,*) tEnd
@@ -146,6 +160,8 @@ if (procID == 0) then
                 s_dim = 5
             else if (prob_flag == 4) then
                 s_dim = 12
+            else if (prob_flag == 45) then
+                s_dim = 42
             end if
 
             allocate(s(s_dim), STAT=f_stat)
@@ -168,16 +184,30 @@ if (procID == 0) then
             read (2,'(/I10)') DoF
             noState = 2*DoF
 
-            allocate(m_global(DoF*N_global), STAT=f_stat)
+            if (prob_flag == 1) then
+                m_dim = DoF
+                b_dim = DoF
+            else if (prob_flag == 2) then
+                m_dim = DoF
+                b_dim = DoF
+            else if (prob_flag == 4) then
+                m_dim = DoF
+                b_dim = DoF
+            else if (prob_flag == 45) then
+                m_dim = 12
+                b_dim = 1
+            end if
+
+            allocate(m_global(m_dim*N_global), STAT=f_stat)
             read (2,*)
             do it = 1, N_global
-                read (2,*) m_global(DoF*(it-1)+1:DoF*it)
+                read (2,*) m_global(m_dim*(it-1)+1:m_dim*it)
             end do
 
-            allocate(b_global(DoF*N_global), STAT=f_stat)
+            allocate(b_global(b_dim*N_global), STAT=f_stat)
             read (2,*)
             do it = 1, N_global
-                read (2,*) b_global(DoF*(it-1)+1:DoF*it)
+                read (2,*) b_global(b_dim*(it-1)+1:b_dim*it)
             end do
 
             allocate(x(noState*N_global), STAT=f_stat)
@@ -232,6 +262,8 @@ else if (sol_flag == 40) then
     call MPI_BCAST(b3, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
     call MPI_BCAST(b4, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 end if
+call MPI_BCAST(tol_inv, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(N_inv, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(dt, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(tStart, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(tEnd, 1, MPI_DOUBLE_PRECISION , 0, MPI_COMM_WORLD, mpi_ierr)
@@ -241,6 +273,8 @@ call MPI_BCAST(N_global, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(prob_flag, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(BC(0), 3, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(s_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(m_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(b_dim, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 call MPI_BCAST(LC_dim2, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 if (procID /= 0) then
     allocate(s(s_dim), STAT=f_stat)
@@ -259,6 +293,10 @@ else if (prob_flag == 2) then
     p_calc_f => calc_f_phi4
 else if (prob_flag == 4) then
     p_calc_f => calc_f_metabeam
+!else if (prob_flag == 41) then
+!    p_calc_f => calc_f_metabeam_EB2
+else if (prob_flag == 45) then
+    p_calc_f => calc_f_metabeam_Cont6
 end if
 
 N_fl = N_global/noProc
@@ -288,26 +326,31 @@ do it = 1, LC_dim2
 end do
 
 !! Set parameters for MPI_SCATTERV
+allocate(scatter_sc(noProc), STAT=f_stat)
+allocate(scatter_disp(noProc), STAT=f_stat)
 if (procID == 0) then
-    allocate(scatter_sc(noProc), STAT=f_stat)
-    allocate(scatter_disp(noProc), STAT=f_stat)
-    allocate(scatter_sc2(noProc), STAT=f_stat)
-    allocate(scatter_disp2(noProc), STAT=f_stat)
+    allocate(scatter_sc_m(noProc), STAT=f_stat)
+    allocate(scatter_disp_m(noProc), STAT=f_stat)
+    allocate(scatter_sc_b(noProc), STAT=f_stat)
+    allocate(scatter_disp_b(noProc), STAT=f_stat)
     allocate(scatter_sc3(noProc), STAT=f_stat)
     allocate(scatter_disp3(noProc), STAT=f_stat)
     scatter_disp(1) = 0
-    scatter_disp2(1) = 0
+    scatter_disp_m(1) = 0
     scatter_disp3(1) = 0
     do it = 1, noProc
         if (it == noProc) then
             scatter_sc(it) = noState*(N_global/noProc + MOD(N_global,noProc))
-            scatter_sc2(it) = DoF*(N_global/noProc + MOD(N_global,noProc))
+            scatter_sc_m(it) = m_dim*(N_global/noProc + MOD(N_global,noProc))
+            scatter_sc_b(it) = b_dim*(N_global/noProc + MOD(N_global,noProc))
 !            scatter_sc3(it) = LC_loc_dim2
         else
             scatter_sc(it) = noState*(N_global/noProc)
             scatter_disp(it+1) = scatter_disp(it) + scatter_sc(it)
-            scatter_sc2(it) = DoF*(N_global/noProc)
-            scatter_disp2(it+1) = scatter_disp2(it) + scatter_sc2(it)
+            scatter_sc_m(it) = m_dim*(N_global/noProc)
+            scatter_disp_m(it+1) = scatter_disp_m(it) + scatter_sc_m(it)
+            scatter_sc_b(it) = b_dim*(N_global/noProc)
+            scatter_disp_b(it+1) = scatter_disp_b(it) + scatter_sc_b(it)
 !            scatter_sc3(it) = LC_loc_dim2
 !            scatter_disp3(it+1) = scatter_disp3(it) + scatter_sc3(it)
         end if
@@ -324,10 +367,12 @@ if (procID == 0) then
 else
     call MPI_SEND(LC_loc_dim2, 1, MPI_INTEGER, 0, 0, MPI_COMM_WORLD, mpi_ierr)
 end if
+call MPI_BCAST(scatter_sc, noProc, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
+call MPI_BCAST(scatter_disp, noProc, MPI_INTEGER, 0, MPI_COMM_WORLD, mpi_ierr)
 
 allocate(x_loc(noState*(N_loc+2)), STAT=f_stat)
-allocate(m_loc(DoF*N_loc), STAT=f_stat) 
-allocate(b_loc(DoF*N_loc), STAT=f_stat) 
+allocate(m_loc(m_dim*N_loc), STAT=f_stat) 
+allocate(b_loc(b_dim*N_loc), STAT=f_stat) 
 allocate(p_loc(DoF*N_loc), STAT=f_stat) 
 allocate(xTmp(noState*(N_loc+2)), STAT=f_stat)
 
@@ -348,9 +393,9 @@ tWallclockStart = MPI_WTIME()
 !! Distribute global data to each process
 call MPI_SCATTERV(x, scatter_sc, scatter_disp, MPI_DOUBLE_PRECISION, x_loc(noState+1), noState*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-call MPI_SCATTERV(m_global, scatter_sc2, scatter_disp2, MPI_DOUBLE_PRECISION, m_loc, DoF*N_loc, &
+call MPI_SCATTERV(m_global, scatter_sc_m, scatter_disp_m, MPI_DOUBLE_PRECISION, m_loc, m_dim*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
-call MPI_SCATTERV(b_global, scatter_sc2, scatter_disp2, MPI_DOUBLE_PRECISION, b_loc, DoF*N_loc, &
+call MPI_SCATTERV(b_global, scatter_sc_b, scatter_disp_b, MPI_DOUBLE_PRECISION, b_loc, b_dim*N_loc, &
 & MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpi_ierr)
 
 !! Update ghost cells
@@ -404,7 +449,7 @@ if (procID == 0) then
     call h5sclose_f(aspace_s_id, hdf5_ierr)
     call h5sclose_f(aspace_f_UC_id, hdf5_ierr)
 
-    dims_m = (/ DoF*N_global /)
+    dims_m = (/ m_dim*N_global /)
     call h5screate_simple_f(1, dims_m, dspace_m_id, hdf5_ierr)
     call h5dcreate_f(file_id, "/m", H5T_NATIVE_REAL, dspace_m_id, dset_m_id, hdf5_ierr)
     call h5dwrite_f(dset_m_id, H5T_NATIVE_DOUBLE, m_global, dims_m, hdf5_ierr)
@@ -457,6 +502,80 @@ if (procID == 0) then
     deallocate(b_global, STAT=f_stat)
 end if
 
+!N_inv = 200
+!tol_inv = 1.0e-16
+!DoF = 1
+!N_loc = 3
+!if (procID == 0) then
+!    A_test = (/ 0., 2., 1., 1., 2., 1., 1., 2., 1. /)
+!    svec_test = (/ 0., 0., 0./)
+!else if (procID == 1) then
+!    A_test = (/ 1., 2., 1., 1., 2., 1., 1., 1., 0. /)
+!    svec_test = (/ 0., 1., 0. /)
+!end if
+!
+!call solve_LinSys(N_inv, tol_inv, N_loc, procID, noProc, A_test, Ainv_col_test, svec_test)
+!write (*,*) "Process ", procID, ": ", Ainv_col_test
+!call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+
+if (prob_flag == 41 .or. prob_flag == 45) then
+    allocate(f(noState*N_global), STAT=f_stat)
+    allocate(A_loc(3*DoF*DoF*N_loc), STAT=f_stat)
+    do it = 1, N_loc
+        if (it == 1 .and. procID == 0) then
+            call calc_A(BC(1), m_loc(m_dim*(it-1)+1), s, A_loc(3*DoF*DoF*(it-1)+1))
+        else if (it == N_loc .and. procID == noProc-1) then
+            call calc_A(BC(2), m_loc(m_dim*(it-1)+1), s, A_loc(3*DoF*DoF*(it-1)+1))
+        else
+            call calc_A(BC(0), m_loc(m_dim*(it-1)+1), s, A_loc(3*DoF*DoF*(it-1)+1))
+        end if
+    end do
+!    if (procID == 0) then
+!        write (*,*) A_loc
+!        call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+!    end if
+
+    !!!!! ATTN: Create another solver storing the inverse columnwise and compare performance
+!    allocate(Ainv_loc(DoF*(N_loc+2)*DoF*N_global), STAT=f_stat)
+!    allocate(svec(DoF*N_loc), STAT=f_stat)
+!    do it = 1, N_global
+!        do it2 = 1, DoF
+!            svec = 0.0
+!            if (procID*N_fl < it .and. it <= procID*N_fl+N_loc) then
+!                svec(DoF*(it-procID*N_fl-1)+it2) = 1.0
+!            end if
+!            call solve_LinSys(N_inv, tol_inv, N_loc, ProcID, noProc, A_loc, Ainv_loc(DoF*(N_loc+2)*(DoF*(it-1)+it2-1)+1), svec)
+!!            if (it == 9 .and. it2 == 1 .and. procID == 0) then
+!!                write (*,*) Ainv_loc(DoF*(N_loc+2)*(DoF*(it-1)+it2-1)+1:DoF*(N_loc+2)*(DoF*(it-1)+it2))
+!!                call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+!!            end if
+!        end do
+!    end do
+    allocate(Ainv_col(DoF*(N_loc+2)), STAT=f_stat)
+    allocate(Ainv_loc(DoF*N_global*DoF*N_loc), STAT=f_stat)
+    allocate(svec(DoF*N_loc), STAT=f_stat)
+    do it = 1, N_global
+        do it2 = 1, DoF
+            svec = 0.0
+            if (procID*N_fl < it .and. it <= procID*N_fl+N_loc) then
+                svec(DoF*(it-procID*N_fl-1)+it2) = 1.0
+            end if
+            call solve_LinSys(N_inv, tol_inv, N_loc, ProcID, noProc, A_loc, Ainv_col, svec)
+            Ainv_loc(DoF*(it-1)+it2::DoF*N_global) = Ainv_col(DoF+1:DoF*(N_loc+1))
+!            Ainv_loc(DoF*N_loc*(DoF*(it-1)+it2-1)+1:DoF*N_loc*(DoF*(it-1)+it2)) = Ainv_col(DoF+1:DoF*(N_loc+1))
+!            if (it == 9 .and. it2 == 1 .and. procID == 0) then
+!                write (*,*) Ainv_loc(DoF*N_loc*(DoF*(it-1)+it2-1)+1:DoF*N_loc*(DoF*(it-1)+it2))
+!                call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+!            end if
+        end do
+    end do
+!    if (procID == 0) then
+!        write (*,*) Ainv_loc(1:54)
+!        call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+!    end if
+end if
+
+
 !! Iterate for each time step dt
 do 
     !! Calculate k1
@@ -470,13 +589,13 @@ do
             
     do it2 = 1, N_loc
         if (it2 == 1 .and. procID == 0) then
-            call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+            call p_calc_f(BC(1), 0, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                 & p_loc(DoF*(it2-1)+1), s, x_loc(noState*it2+1), k1(noState*it2+1))
         else if (it2 == N_loc .and. procID == noProc-1) then
-            call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+            call p_calc_f(BC(2), -noState, noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                 & p_loc(DoF*(it2-1)+1), s, x_loc(noState*(it2-1)+1), k1(noState*it2+1))
         else
-            call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+            call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                 & p_loc(DoF*(it2-1)+1), s, x_loc(noState*(it2-1)+1), k1(noState*it2+1))
         end if
         if ( LC_loc_dim2 > 0 ) then
@@ -490,6 +609,12 @@ do
             end do
         end if
     end do
+
+    if (prob_flag == 41 .or. prob_flag == 45) then
+        call MPI_ALLGATHERV(k1(noState+1), noState*N_loc, MPI_DOUBLE_PRECISION, f, scatter_sc, &
+            & scatter_disp, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpi_ierr)
+        call update_f(N_loc, N_global, Ainv_loc, f, k1(noState+1))
+    end if
 
     if ( MOD(t,dtWrite) < 0.1*dt .or. dtWrite-MOD(t,dtWrite) < 0.1*dt) then
         call MPI_GATHERV(k1(noState+1), noState*N_loc, MPI_DOUBLE_PRECISION, k1_global, scatter_sc, scatter_disp, &
@@ -538,13 +663,13 @@ do
             
         do it2 = 1, N_loc
             if (it2 == 1 .and. procID == 0) then
-                call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                call p_calc_f(BC(1), 0, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                     & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k2(noState*it2+1))
             else if (it2 == N_loc .and. procID == noProc-1) then
-                call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                call p_calc_f(BC(2), -noState, noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                     & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k2(noState*it2+1))
             else
-                call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                     & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k2(noState*it2+1))
             end if
             if ( LC_loc_dim2 > 0 ) then
@@ -558,6 +683,12 @@ do
                 end do
             end if
         end do
+
+        if (prob_flag == 41 .or. prob_flag == 45) then
+            call MPI_ALLGATHERV(k2(noState+1), noState*N_loc, MPI_DOUBLE_PRECISION, f, scatter_sc, &
+                & scatter_disp, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpi_ierr)
+            call update_f(N_loc, N_global, Ainv_loc, f, k2(noState+1))
+        end if
 
         if (sol_flag == 20) then
             x_loc = x_loc + dt*(b1*k1 + b2*k2)
@@ -593,13 +724,13 @@ do
             
             do it2 = 1, N_loc
                 if (it2 == 1 .and. procID == 0) then
-                    call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    call p_calc_f(BC(1), 0, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                         & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k3(noState*it2+1))
                 else if (it2 == N_loc .and. procID == noProc-1) then
-                    call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    call p_calc_f(BC(2), -noState, noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                         & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k3(noState*it2+1))
                 else
-                    call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                    call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                         & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k3(noState*it2+1))
                 end if
                 if ( LC_loc_dim2 > 0 ) then
@@ -613,6 +744,12 @@ do
                     end do
                 end if
             end do
+
+            if (prob_flag == 41 .or. prob_flag == 45) then
+                call MPI_ALLGATHERV(k3(noState+1), noState*N_loc, MPI_DOUBLE_PRECISION, f, scatter_sc, &
+                    & scatter_disp, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpi_ierr)
+                call update_f(N_loc, N_global, Ainv_loc, f, k3(noState+1))
+            end if
 
             if (sol_flag == 30) then
                 x_loc = x_loc + dt*(b1*k1 + b2*k2 + b3*k3)
@@ -648,13 +785,13 @@ do
             
                 do it2 = 1, N_loc
                     if (it2 == 1 .and. procID == 0) then
-                        call p_calc_f(BC(1), 0, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        call p_calc_f(BC(1), 0, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                             & p_loc(DoF*(it2-1)+1), s, xTmp(noState*it2+1), k4(noState*it2+1))
                     else if (it2 == N_loc .and. procID == noProc-1) then
-                        call p_calc_f(BC(2), -noState, noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        call p_calc_f(BC(2), -noState, noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                             & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k4(noState*it2+1))
                     else
-                        call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(DoF*(it2-1)+1), b_loc(DoF*(it2-1)+1), &
+                        call p_calc_f(BC(0), -noState, 2*noState-1, m_loc(m_dim*(it2-1)+1), b_loc(b_dim*(it2-1)+1), &
                             & p_loc(DoF*(it2-1)+1), s, xTmp(noState*(it2-1)+1), k4(noState*it2+1))
                     end if
                     if ( LC_loc_dim2 > 0 ) then
@@ -668,7 +805,21 @@ do
                         end do
                     end if
                 end do
+
+                if (prob_flag == 41 .or. prob_flag == 45) then
+                    call MPI_ALLGATHERV(k4(noState+1), noState*N_loc, MPI_DOUBLE_PRECISION, f, scatter_sc, &
+                        & scatter_disp, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpi_ierr)
+                    call update_f(N_loc, N_global, Ainv_loc, f, k4(noState+1))
+                end if
+
                 x_loc = x_loc + dt*(b1*k1 + b2*k2 + b3*k3 + b4*k4)
+                
+!                if (procID == 0) then
+!                    write (*,*) x_loc
+!                    if ( ABS(t-tEnd/50) < 0.1*dt ) then
+!                        call MPI_ABORT(MPI_COMM_WORLD, mpi_errcode, mpi_ierr)
+!                    end if
+!                end if
             end if
         end if
     end if

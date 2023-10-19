@@ -6,12 +6,13 @@ module sub_rk
 
 implicit none
 private
-public :: calc_f_metabeam, calc_f_pendula, calc_f_phi4, calc_load
-public :: DoF, noState, s_dim
+public :: calc_f_metabeam, calc_f_metabeam_Cont6, calc_f_pendula, calc_f_phi4, calc_load
+public :: calc_A, solve_LinSys, update_f
+public :: DoF, noState, s_dim, m_dim, b_dim
 
 integer :: DoF ! unit cell degrees of freedom
 integer :: noState ! number of states per unit cell
-integer :: s_dim
+integer :: s_dim, m_dim, b_dim
 
 
 contains
@@ -21,8 +22,8 @@ contains
     integer, intent(in) :: BC_flag
     integer, intent(in) :: lowerBound
     integer, intent(in) :: upperBound
-    real, intent(in), dimension(DoF) :: m
-    real, intent(in), dimension(DoF) :: b
+    real, intent(in), dimension(m_dim) :: m
+    real, intent(in), dimension(b_dim) :: b
     real, intent(in), dimension(DoF) :: p
     real, intent(in), dimension(s_dim) :: s
     real, intent(in), dimension(lowerBound:upperBound) :: x
@@ -495,14 +496,133 @@ contains
     end subroutine calc_f_metabeam
 
 
+    !!!!!!!
+    subroutine calc_f_metabeam_Cont6(BC_flag, lowerBound, upperBound, m, beta, p, s, x, f)
+
+    !! Data dictionary
+    !!!!! Define beta
+    integer, intent(in) :: BC_flag
+    integer, intent(in) :: lowerBound
+    integer, intent(in) :: upperBound
+    real, intent(in), dimension(m_dim) :: m
+    real, intent(in), dimension(b_dim) :: beta
+    real, intent(in), dimension(DoF) :: p
+    real, intent(in), dimension(s_dim) :: s
+    real, intent(in), dimension(lowerBound:upperBound) :: x
+    real, intent(out), dimension(noState) :: f
+
+    f = 0.
+    if (BC_flag == 100) then
+        f(1) = x(1)
+
+        f(2) = p(1) + (-(s(42)**2*(6*s(4)*x(0) + s(29)*x(0)**3 + 6*beta(1)*m(1)*x(1) + x(4)*(6*s(5) + 3&
+            &*s(30)*x(0)**2 + 3*s(32)*x(0)*x(4) + s(34)*x(4)**2) + 3*(2*s(6) + s(31)*x(0)**2)*x(8) +&
+            &3*s(33)*x(0)*x(8)**2 + s(35)*x(8)**3)) + 6*s(24)*(x(-12) - 2*x(0) + x(12)))/(6.*s(42)**2)
+
+        f(3) = x(3)
+
+        f(4) = p(2) - s(1) - s(7)*x(2) - beta(1)*m(2)*x(3) - s(8)*x(6) - s(9)*x(10)
+
+        f(5) = x(5)
+
+        f(6) = (6*s(25)*(x(-8) - 2*x(4) + x(16)) + s(42)*(6*p(3)*s(42) - s(42)*(6*s(5)*x(0) + s(30)*&
+            &x(0)**3 + x(4)*(6*s(10) + 3*s(32)*x(0)**2 + 3*s(34)*x(0)*x(4) + s(36)*x(4)**2) + 3*s(37&
+            &)*x(4)**2*x(8) + 3*s(38)*x(4)*x(8)**2 + s(39)*x(8)**3 + 6*(beta(1)*m(3)*x(5) + s(11)*x(8))&
+            &) + 3*(s(12) - s(16))*(x(-6) - x(18)) + 3*(s(13) - s(22))*(x(-2) - x(22))))/(6.*s(42)**2)
+
+        f(7) = x(7)
+        
+        f(8) = (2*s(26)*(x(-6) - 2*x(6) + x(18)) + s(42)*(2*p(4)*s(42) - 2*s(42)*(s(2) + s(8)*x(2) +&
+            &s(14)*x(6) + beta(1)*m(4)*x(7) + s(15)*x(10)) - (s(12) - s(16))*(x(-8) - x(16)) + (s(17) -&
+            &s(19))*(x(-4) - x(20))))/(2.*s(42)**2)
+
+        f(9) = x(9)
+
+        f(10) = (6*s(27)*(x(-4) - 2*x(8) + x(20)) + s(42)*(6*p(5)*s(42) - s(42)*(6*s(6)*x(0) + s(31)&
+            &*x(0)**3 + 6*s(11)*x(4) + s(37)*x(4)**3 + 6*s(18)*x(8) + x(8)*(3*s(33)*x(0)**2 + 3*s(38&
+            &)*x(4)**2 + x(8)*(3*s(35)*x(0) + 3*s(39)*x(4) + s(40)*x(8))) + 6*beta(1)*m(5)*x(9)) - 3*(s&
+            &(17) - s(19))*(x(-6) - x(18)) + 3*(s(20) - s(23))*(x(-2) - x(22))))/(6.*s(42)**2)
+
+        f(11) = x(11)
+
+        f(12) = p(6) - (2*s(42)*(s(3) + s(9)*x(2) + s(15)*x(6) + s(21)*x(10) + beta(1)*m(6)*x(11)) + (s&
+            &(13) - s(22))*(x(-8) - x(16)) + (s(20) - s(23))*(x(-4) - x(20)))/(2.*s(42)) + (s(28)*(x&
+            &(-2) - 2*x(10) + x(22)))/s(42)**2
+
+    else if (BC_flag == 110) then
+
+    else if (BC_flag == 111) then
+        f(1) = f(1)
+
+        f(2) = p(1) - s(4)*x(0) - (s(29)*x(0)**3)/6. - beta(1)*m(1)*x(1) + (s(24)*(-x(0) + x(12)))/s(42)**2
+
+        f(3) = x(3)
+
+        f(4) = p(2) - s(1) - s(7)*x(2) - beta(1)*m(2)*x(3)
+
+    else if (BC_flag == 112) then
+
+    else if (BC_flag == 120) then
+        f(1) = x(1)
+
+        f(2) = p(1) + (6*s(24)*(x(-12) - x(0)) - s(42)**2*(6*s(4)*x(0) + s(29)*x(0)**3 + 6*beta(1)*m(1)&
+            &*x(1) + x(4)*(6*s(5) + 3*s(30)*x(0)**2 + 3*s(32)*x(0)*x(4) + s(34)*x(4)**2) + 3*(2*s(6)&
+            &+ s(31)*x(0)**2)*x(8) + 3*s(33)*x(0)*x(8)**2 + s(35)*x(8)**3))/(6.*s(42)**2)
+
+        f(3) = x(3)
+
+        f(4) = p(2) - s(1) - s(7)*x(2) - beta(1)*m(2)*x(3) - s(8)*x(6) - s(9)*x(10)
+
+        f(5) = x(5)
+
+        f(6) = (6*s(25)*(x(-8) - x(4)) + s(42)*(6*p(3)*s(42) + 3*(s(12) - s(16))*(x(-6) - x(6)) - s(&
+            &42)*(6*s(5)*x(0) + s(30)*x(0)**3 + x(4)*(6*s(10) + 3*s(32)*x(0)**2 + 3*s(34)*x(0)*x(4) &
+            &+ s(36)*x(4)**2) + 3*s(37)*x(4)**2*x(8) + 3*s(38)*x(4)*x(8)**2 + s(39)*x(8)**3 + 6*(beta(1&
+            &)*m(3)*x(5) + s(11)*x(8))) + 3*(s(13) - s(22))*(x(-2) - x(10))))/(6.*s(42)**2)
+
+        f(7) = x(7)
+
+        f(8) = (2*s(26)*(x(-6) - x(6)) + s(42)*(2*p(4)*s(42) - (s(12) - s(16))*(x(-8) - x(4)) + (s(1&
+            &7) - s(19))*(x(-4) - x(8)) - 2*s(42)*(s(2) + s(8)*x(2) + s(14)*x(6) + beta(1)*m(4)*x(7) + &
+            &s(15)*x(10))))/(2.*s(42)**2)
+
+        f(9) = x(9)
+
+        f(10) = (6*s(27)*(x(-4) - x(8)) + s(42)*(6*p(5)*s(42) - 3*(s(17) - s(19))*(x(-6) - x(6)) - s&
+            &(42)*(6*s(6)*x(0) + s(31)*x(0)**3 + 6*s(11)*x(4) + s(37)*x(4)**3 + 6*s(18)*x(8) + x(8)*&
+            &(3*s(33)*x(0)**2 + 3*s(38)*x(4)**2 + x(8)*(3*s(35)*x(0) + 3*s(39)*x(4) + s(40)*x(8))) +&
+            &6*beta(1)*m(5)*x(9)) + 3*(s(20) - s(23))*(x(-2) - x(10))))/(6.*s(42)**2)
+
+        f(11) = x(11)
+
+        f(12) = p(6) + (s(28)*(x(-2) - x(10)))/s(42)**2 - ((s(13) - s(22))*(x(-8) - x(4)) + (s(20) -&
+            &s(23))*(x(-4) - x(8)) + 2*s(42)*(s(3) + s(9)*x(2) + s(15)*x(6) + s(21)*x(10) + beta(1)*m(6&
+            &)*x(11)))/(2.*s(42))
+
+    else if (BC_flag == 121) then
+
+    else if (BC_flag == 200) then
+
+    else if (BC_flag == 2112) then
+
+    else if (BC_flag == 2212) then
+
+    else if (BC_flag == 700 .or. BC_flag == 710 .or. BC_flag == 720) then
+
+    else if (BC_flag == 800 .or. BC_flag == 810 .or. BC_flag == 820) then
+
+    end if
+
+    end subroutine calc_f_metabeam_Cont6
+
     subroutine calc_f_pendula(BC_flag, lowerBound, upperBound, m, b, p, s, x, f)
 
     !! Data dictionary
     integer, intent(in) :: BC_flag
     integer, intent(in) :: lowerBound
     integer, intent(in) :: upperBound
-    real, intent(in), dimension(DoF) :: m
-    real, intent(in), dimension(DoF) :: b
+    real, intent(in), dimension(m_dim) :: m
+    real, intent(in), dimension(b_dim) :: b
     real, intent(in), dimension(DoF) :: p
     real, intent(in), dimension(s_dim) :: s
     real, intent(in), dimension(lowerBound:upperBound) :: x
@@ -531,8 +651,8 @@ contains
     integer, intent(in) :: BC_flag
     integer, intent(in) :: lowerBound
     integer, intent(in) :: upperBound
-    real, intent(in), dimension(DoF) :: m
-    real, intent(in), dimension(DoF) :: b
+    real, intent(in), dimension(m_dim) :: m
+    real, intent(in), dimension(b_dim) :: b
     real, intent(in), dimension(DoF) :: p
     real, intent(in), dimension(s_dim) :: s
     real, intent(in), dimension(lowerBound:upperBound) :: x
@@ -599,5 +719,204 @@ contains
 
     end subroutine calc_load
 
+
+    !=============================================================================
+    !=============================================================================
+    subroutine calc_A(BC_flag, m, s, A)
+
+    !! Data dictionary
+    integer, intent(in) :: BC_flag
+    real, intent(in), dimension(m_dim) :: m
+    real, intent(in), dimension(s_dim) :: s
+    real, intent(out), dimension(3*DoF*DoF) :: A
+    integer :: it
+
+    A = 0.
+    if (BC_flag == 100) then
+        A(1) = -m(7)/s(42)**2
+        A(7) = m(1) + (2*m(7))/s(42)**2
+        A(13) = -m(7)/s(42)**2
+        A(20) = -m(8)/s(42)**2
+        A(26) = m(2) + (2*m(8))/s(42)**2
+        A(32) = -m(8)/s(42)**2
+        A(39) = -m(9)/s(42)**2
+        A(45) = m(3) + (2*m(9))/s(42)**2
+        A(51) = -m(9)/s(42)**2
+        A(58) = -m(10)/s(42)**2
+        A(64) = m(4) + (2*m(10))/s(42)**2
+        A(70) = -m(10)/s(42)**2
+        A(77) = -m(11)/s(42)**2
+        A(83) = m(5) + (2*m(11))/s(42)**2
+        A(89) = -m(11)/s(42)**2
+        A(96) = -m(12)/s(42)**2
+        A(102) = m(6) + (2*m(12))/s(42)**2
+        A(108) = -m(12)/s(42)**2
+
+    else if (BC_flag == 110) then
+        
+    else if (BC_flag == 111) then
+        A(7) = m(1) + m(7)/s(42)**2
+        A(13) = -m(7)/s(42)**2
+        A(26) = m(2) + m(8)/s(42)**2
+        A(32) = -m(8)/s(42)**2
+        A(45) = 1.
+        A(64) = 1.
+        A(83) = 1.
+        A(102) = 1.
+
+    else if (BC_flag == 120) then
+        A(1) = -m(7)/s(42)**2
+        A(7) = m(1) + m(7)/s(42)**2
+        A(20) = -m(8)/s(42)**2
+        A(26) = m(2) + m(8)/s(42)**2
+        A(39) = -m(9)/s(42)**2
+        A(45) = m(3) + m(9)/s(42)**2
+        A(58) = -m(10)/s(42)**2
+        A(64) = m(4) + m(10)/s(42)**2
+        A(77) = -m(11)/s(42)**2
+        A(83) = m(5) + m(11)/s(42)**2
+        A(96) = -m(12)/s(42)**2
+        A(102) = m(6) + m(12)/s(42)**2
+
+    else if (BC_flag == 121) then
+
+    end if
+
+    end subroutine calc_A
+
+
+    subroutine solve_LinSys(N_inv, tol_inv, N_loc, procID, noProc, A, x, b)
+    !! Solve for x in Ax=b
+    !!!!!! ATTN: define N_in and tol_inv in the input file.
+
+    use mpi
+
+    !! Data dictionary
+    integer, intent(in) :: N_inv ! max number of itertations for matrix inversion
+    real, intent(in) :: tol_inv !
+    integer, intent(in) :: N_loc 
+    integer, intent(in) :: procID, noProc
+    real, intent(in), dimension(3*DoF*DoF*N_loc) :: A
+    real, intent(out), dimension(1:DoF*(N_loc+2)) :: x
+    real, intent(in), dimension(DoF*N_loc) :: b
+    ! Data dictionary:
+    integer :: mpi_ierr, status(MPI_STATUS_SIZE), mpi_errcode
+    real, dimension(DoF*(N_loc+2)) :: d
+    real, dimension(DoF*N_loc) :: g
+    real, dimension(DoF*N_loc) :: t
+    real, dimension(2) :: dn1_loc, dn2_loc 
+    real, dimension(2) :: dn1, dn2 ! dn1(1)->d1, dn1(2)->n1
+    real :: s
+    integer :: it, it2, it3, it4, ind, ind2
+    real :: t_inv_start, t_inv_end
+
+    d = 0.
+    x = 0.
+    g = -b
+    do it = 1, N_inv
+        if (procID == 0 .and. it == N_inv) then
+            write (*,*) " >> WARNING: Max number of iterations for matrix inversion reached &
+                &while solving for A inverse."
+            write (*,*) "n1 is ", dn1(2)
+!            cnt_inv = cnt_inv + it
+        end if
+        dn1_loc(1) = DOT_PRODUCT(g, g)
+        do it2 = 1, N_loc
+            ind = 3*DoF*DoF*(it2-1)
+            do it3 = 1, DoF
+                g(DoF*(it2-1)+it3) = DOT_PRODUCT(A(ind+3*DoF*(it3-1)+1:ind+3*DoF*it3), &
+                    &x(DoF*(it2-1)+1:DoF*(it2+2))) - b(DoF*(it2-1)+it3)
+            end do
+        end do
+
+        dn1_loc(2) = DOT_PRODUCT(g, g)
+        call MPI_Allreduce(dn1_loc(1), dn1(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpi_ierr)
+        if (dn1(2) < tol_inv) then
+!            cnt_inv = cnt_inv+it
+!            call MPI_BARRIER(MPI_COMM_WORLD, mpi_ierr)
+!            t_inv_end = MPI_WTIME()
+!            t_inv_total = t_inv_total + t_inv_end-t_inv_start
+            exit
+        end if
+        d(DoF+1:DoF*(N_loc+1)) = -g + dn1(2)/dn1(1)*d(DoF+1:DoF*(N_loc+1))
+        dn2_loc(2) = DOT_PRODUCT(d(DoF+1:DoF*(N_loc+1)), g)
+        if (noProc /=1) then
+            if (procID == 0) then
+                call MPI_SEND(d(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & MPI_COMM_WORLD, mpi_ierr)
+                call MPI_RECV(d(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, &
+                & MPI_COMM_WORLD, status, mpi_ierr)
+            else if (procID == noProc-1) then
+                call MPI_SEND(d(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & MPI_COMM_WORLD, mpi_ierr) 
+                call MPI_RECV(d(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, &
+                & MPI_COMM_WORLD, status, mpi_ierr)
+            else
+                call MPI_SENDRECV(d(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & d(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, mpi_ierr)
+                call MPI_SENDRECV(d(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & d(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, mpi_ierr)
+            end if
+        end if
+        do it2 = 1, N_loc
+            ind = 3*DoF*DoF*(it2-1)
+            do it3 = 1, DoF
+                t(DoF*(it2-1)+it3) = DOT_PRODUCT(A(ind+3*DoF*(it3-1)+1:ind+3*DoF*it3), &
+                    &d(DoF*(it2-1)+1:DoF*(it2+2)))
+            end do
+        end do
+        dn2_loc(1) = DOT_PRODUCT(d(DoF+1:DoF*(N_loc+1)), t)
+        call MPI_Allreduce(dn2_loc(1), dn2(1), 2, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpi_ierr)
+        s = -dn2(2)/dn2(1)
+        x(DoF+1:DoF*(N_loc+1)) = x(DoF+1:DoF*(N_loc+1)) + s*d(DoF+1:DoF*(N_loc+1))
+
+        if (noProc /=1) then
+            if (procID == 0) then
+                call MPI_SEND(x(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & MPI_COMM_WORLD, mpi_ierr)
+                call MPI_RECV(x(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, &
+                & MPI_COMM_WORLD, status, mpi_ierr)
+            else if (procID == noProc-1) then
+                call MPI_SEND(x(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & MPI_COMM_WORLD, mpi_ierr) 
+                call MPI_RECV(x(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, &
+                & MPI_COMM_WORLD, status, mpi_ierr)
+            else
+                call MPI_SENDRECV(x(DoF+1), DoF, MPI_DOUBLE_PRECISION, procID-1, 0, &
+                & x(1), DoF, MPI_DOUBLE_PRECISION, procID-1, 1, MPI_COMM_WORLD, status, mpi_ierr)
+                call MPI_SENDRECV(x(DoF*N_loc+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 1, &
+                & x(DoF*(N_loc+1)+1), DoF, MPI_DOUBLE_PRECISION, procID+1, 0, MPI_COMM_WORLD, status, mpi_ierr)
+            end if
+        end if
+
+    end do
+
+    end subroutine solve_LinSys
+
+
+    subroutine update_f(N_loc, N_global, Ainv, f, k)
+        !
+        !! Data dictionary
+        integer, intent(in) :: N_loc 
+        integer, intent(in) :: N_global 
+        real, intent(in), dimension(DoF*N_global*DoF*N_loc) :: Ainv
+        real, intent(in), dimension(1:noState*N_global) :: f
+        real, intent(inout), dimension(1:noState*N_loc) :: k
+        ! Data dictionary:
+!        integer :: mpi_ierr, status(MPI_STATUS_SIZE), mpi_errcode
+        integer :: it, it2, ind, ind2, nCol
+
+        ind = 2
+        ind2 = 1
+        nCol = DoF*N_global
+        do it = 1, N_loc
+            do it2 = 1, DoF
+                k(ind) = DOT_PRODUCT(Ainv(ind2:ind2+nCol), f(2::2))
+                ind = ind + 2
+                ind2 = ind2 + nCol
+            end do
+        end do
+
+    end subroutine update_f
 
 end module sub_rk

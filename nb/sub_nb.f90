@@ -3078,7 +3078,7 @@ contains
     ! Data dictionary:
     integer, intent(in) :: N_inv ! max number of itertations for matrix inversion
     real, intent(in) :: tol_inv !
-    integer, intent(in) :: n_loc ! No. of unit cells per process
+    integer, intent(in) :: N_loc ! No. of unit cells per process
     integer, intent(in) :: procID, noProc
     real, intent(in), dimension(3*DoF*DoF*N_loc) :: kThat !
     real, intent(in), dimension(DoF*N_loc) :: res !
